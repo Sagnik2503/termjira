@@ -1,6 +1,6 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue} = require('./issue')
 
 // seed issues for development
 create_issue("Learn JavaScript", "Practice functions")
@@ -23,9 +23,7 @@ function showHelp() {
     console.log("list - list all issues");
     console.log("show [id] - show an issue (defaults to the checked-out issue)");
     console.log("checkout <id> - check out an issue");
-    console.log("edit <id> <title|description> <value> - edit an issue field");
-    console.log("status <id> <TODO|IN_PROGRESS|CLOSED> - set an issue's status");
-    console.log("priority <id> <low|medium|high> - set an issue's priority");
+    console.log("update <id> <title|description|status|priority> <value> - update an issue field");
     console.log("delete <id> - delete an issue");
     console.log("exit - Exit TermJira");
 }
@@ -55,27 +53,20 @@ const commands = {
         rl.close()
         return false
     },
-    edit: ([id, key, ...body])=>{
-        body=body.join(" ")
-        if(key==="title"){
-            const issue=edit_title(Number(id), body)
-            if (issue) console.log(`Title updated for issue #${id}`)
+    update: ([id, field, ...value])=>{
+        const fields = {
+            title: edit_title,
+            description: edit_description,
+            status: update_status,
+            priority: update_priority,
         }
-        else if(key==="description"){
-            const issue = edit_description(Number(id), body)
-            if (issue) console.log(`Description updated for issue #${id}`)
+        const updater = fields[String(field).toLowerCase()]
+        if (!updater) {
+            console.log("Invalid field. Use title, description, status, or priority.")
+            return
         }
-        else{
-            console.log("Invalid field. Use 'title' or 'description'.")
-        }
-    },
-    status: ([id, body])=>{
-        const issue=update_status(Number(id), body)
-        if (issue) console.log(`Status changed to ${issue.status} for issue #${id}`)
-    },
-    priority: ([id, new_priority])=>{
-        const issue = update_priority(Number(id), new_priority)
-        if (issue) console.log(`Priority changed to ${issue.priority} for issue #${issue.id}`)
+        const issue = updater(Number(id), value.join(" "))
+        if (issue) console.log(format_issue(issue))
     },
     delete: ([id])=>{
         const issue = delete_issue(Number(id))

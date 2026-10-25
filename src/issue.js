@@ -82,6 +82,11 @@ function get_current_issue() {
 }
 
 function edit_title(id,title){
+    title = String(title ?? "").trim()
+    if(!title){
+        console.log("Title cannot be empty.")
+        return
+    }
     const issue = issue_store.find(element => element.id === id)
     if(!issue){
         console.log("Issue DNE")
@@ -89,18 +94,21 @@ function edit_title(id,title){
     }
     issue.title=title
     return issue
-
 }
 
 function edit_description(id,description){
+    description = String(description ?? "").trim()
+    if(!description){
+        console.log("Description cannot be empty.")
+        return
+    }
     const issue = issue_store.find(element => element.id === id)
     if(!issue){
         console.log("Issue DNE")
         return
     }
     issue.description=description
-    return description
-
+    return issue
 }
 
 function update_status(id, new_status){
@@ -145,4 +153,4 @@ function delete_issue(id){
     return issue
 }
 
-module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue}
+module.exports = { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue}
