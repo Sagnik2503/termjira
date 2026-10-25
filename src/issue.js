@@ -76,4 +76,14 @@ function edit_description(id,description){
 
 }
 
-module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title}
+function update_status(id, new_status){
+    const issue = issue_store.find(element => element.id === id)
+    if(!issue){
+        console.log("Issue DNE")
+        return
+    }
+    issue.status=new_status
+    return issue
+}
+
+module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status}
