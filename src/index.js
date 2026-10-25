@@ -23,6 +23,8 @@ function showHelp() {
     console.log("list - list all issues");
     console.log("show [id] - show an issue (defaults to the checked-out issue)");
     console.log("checkout <id> - check out an issue");
+    console.log("edit <id> <title|description> <value> - edit an issue field");
+    console.log("status <id> <TODO|IN_PROGRESS|CLOSED> - set an issue's status");
     console.log("priority <id> <low|medium|high> - set an issue's priority");
     console.log("delete <id> - delete an issue");
     console.log("exit - Exit TermJira");
