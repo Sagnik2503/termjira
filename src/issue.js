@@ -1,0 +1,43 @@
+class Issue {
+    constructor(id, title, description, status, priority) {
+        this.id = id
+        this.title = title
+        this.description = description
+        this.status = status
+        this.priority = priority
+    }
+}
+
+const issue_store = []
+
+function create_issue(title, description, status = "TODO", priority = "MEDIUM") {
+    const issue = new Issue(issue_store.length + 1, title, description, status, priority)
+    issue_store.push(issue)
+    return issue
+}
+
+function list_issues() {
+    if (issue_store.length === 0) {
+        console.log("No issues found")
+    }
+    for (const issue of issue_store) {
+        console.log(`ID: ${issue.id} | ${issue.title} | ${issue.description} | ${issue.status} | ${issue.priority}`)
+    }
+}
+
+function show_issue(id) {
+    const issue = issue_store.find(element => element.id === id)
+    if (!issue) {
+        console.log("Issue not found.")
+        return
+    }
+    console.log(`
+    ID:          ${issue.id}
+    Title:       ${issue.title}
+    Description: ${issue.description}
+    Status:      ${issue.status}
+    Priority:     ${issue.priority}
+    `)
+}
+
+module.exports = { create_issue, list_issues, show_issue }
