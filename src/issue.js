@@ -10,6 +10,7 @@ class Issue {
 
 const issue_store = []
 let currentIssue=null
+let next_id=1
 
 function checkout_issue(id){
     const issue = issue_store.find(element => element.id === id)
@@ -21,7 +22,7 @@ function checkout_issue(id){
     console.log(`Checked out issue #${currentIssue.id}: ${currentIssue.title}`)
 }
 function create_issue(title, description, status = "TODO", priority = "MEDIUM") {
-    const issue = new Issue(issue_store.length + 1, title, description, status, priority)
+    const issue = new Issue(next_id++, title, description, status, priority)
     issue_store.push(issue)
     return issue
 }
@@ -107,4 +108,17 @@ function update_priority(id, new_priority){
     return issue
 }
 
-module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority}
+function delete_issue(id){
+    const index = issue_store.findIndex(element => element.id === id)
+    if(index === -1){
+        console.log("Issue DNE")
+        return
+    }
+    const [issue] = issue_store.splice(index, 1)
+    if(currentIssue === issue){
+        currentIssue = null
+    }
+    return issue
+}
+
+module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue}

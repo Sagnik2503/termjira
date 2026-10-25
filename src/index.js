@@ -1,6 +1,6 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority} = require('./issue')
+const { create_issue, list_issues, show_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue} = require('./issue')
 
 // seed issues for development
 create_issue("Learn JavaScript", "Practice functions")
@@ -24,6 +24,7 @@ function showHelp() {
     console.log("show [id] - show an issue (defaults to the checked-out issue)");
     console.log("checkout <id> - check out an issue");
     console.log("priority <id> <low|medium|high> - set an issue's priority");
+    console.log("delete <id> - delete an issue");
     console.log("exit - Exit TermJira");
 }
 
@@ -74,6 +75,10 @@ const commands = {
     priority: ([id, new_priority])=>{
         const issue = update_priority(Number(id), new_priority)
         if (issue) console.log(`Priority changed to ${issue.priority} for issue #${issue.id}`)
+    },
+    delete: ([id])=>{
+        const issue = delete_issue(Number(id))
+        if (issue) console.log(`Deleted issue #${issue.id}: ${issue.title}`)
     }
 }
 
