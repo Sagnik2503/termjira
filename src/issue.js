@@ -52,13 +52,20 @@ function create_issue(title, description, status = "TODO", priority = "MEDIUM") 
     return issue
 }
 
+function format_issue(issue) {
+    return `ID:          ${issue.id}
+Title:       ${issue.title}
+Description: ${issue.description}
+Status:      ${issue.status}
+Priority:    ${issue.priority}`
+}
+
 function list_issues() {
     if (issue_store.length === 0) {
         console.log("No issues found")
+        return
     }
-    for (const issue of issue_store) {
-        console.log(`ID: ${issue.id} | ${issue.title} | ${issue.description} | ${issue.status} | ${issue.priority}`)
-    }
+    console.log(issue_store.map(format_issue).join("\n\n"))
 }
 
 function show_issue(id) {
@@ -67,13 +74,7 @@ function show_issue(id) {
         console.log("Issue not found.")
         return
     }
-    console.log(`
-    ID:          ${issue.id}
-    Title:       ${issue.title}
-    Description: ${issue.description}
-    Status:      ${issue.status}
-    Priority:     ${issue.priority}
-    `.trimEnd())
+    console.log(format_issue(issue))
 }
 
 function get_current_issue() {
