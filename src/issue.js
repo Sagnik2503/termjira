@@ -21,7 +21,32 @@ function checkout_issue(id){
     currentIssue=issue
     console.log(`Checked out issue #${currentIssue.id}: ${currentIssue.title}`)
 }
+const STATUSES = ["TODO", "IN_PROGRESS", "CLOSED"]
+const PRIORITIES = ["LOW", "MEDIUM", "HIGH"]
+
 function create_issue(title, description, status = "TODO", priority = "MEDIUM") {
+    title = String(title ?? "").trim()
+    description = String(description ?? "").trim()
+    status = String(status ?? "").trim().toUpperCase() || "TODO"
+    priority = String(priority ?? "").trim().toUpperCase() || "MEDIUM"
+
+    if (!title) {
+        console.log("Title cannot be empty.")
+        return
+    }
+    if (!description) {
+        console.log("Description cannot be empty.")
+        return
+    }
+    if (!STATUSES.includes(status)) {
+        console.log(`Invalid status. Choose between ${STATUSES.join(", ")}`)
+        return
+    }
+    if (!PRIORITIES.includes(priority)) {
+        console.log(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
+        return
+    }
+
     const issue = new Issue(next_id++, title, description, status, priority)
     issue_store.push(issue)
     return issue
@@ -79,7 +104,7 @@ function edit_description(id,description){
 
 function update_status(id, new_status){
     const issue = issue_store.find(element => element.id === id)
-    if(new_status!=="IN_PROGRESS" && new_status!=="TODO" && new_status!=="CLOSED"){
+    if(!STATUSES.includes(new_status)){
         console.log(`New status name is incorrect. Choose between "IN_PROGRESS", "TODO", "CLOSED"`)
         return
     }
@@ -90,8 +115,6 @@ function update_status(id, new_status){
     issue.status=new_status
     return issue
 }
-
-const PRIORITIES = ["LOW", "MEDIUM", "HIGH"]
 
 function update_priority(id, new_priority){
     const priority = String(new_priority ?? "").toUpperCase()

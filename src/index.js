@@ -48,7 +48,7 @@ const commands = {
         const status = prompt("Status for the issue: ");
         const priority = prompt("Priority for the issue: ");
         const issue = create_issue(title, description, status, priority);
-        console.log(`Issue created! ID: ${issue.id}`);
+        if (issue) console.log(`Issue created! ID: ${issue.id}`);
     },
     exit: () => {
         console.log("Goodbye!")
