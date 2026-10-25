@@ -78,7 +78,7 @@ function edit_description(id,description){
 
 function update_status(id, new_status){
     const issue = issue_store.find(element => element.id === id)
-    if(new_status!="IN_PROGRESS" || new_status!="TODO" || new_status!="CLOSED"){
+    if(new_status!=="IN_PROGRESS" && new_status!=="TODO" && new_status!=="CLOSED"){
         console.log(`New status name is incorrect. Choose between "IN_PROGRESS", "TODO", "CLOSED"`)
         return
     }
