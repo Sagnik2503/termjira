@@ -21,48 +21,50 @@ function showHelp() {
     console.log("help - Show available commands");
     console.log("create - create a new issue");
     console.log("list - list all issues");
-    console.log("show - show particular issue ID");
+    console.log("show [id] - show an issue (defaults to the checked-out issue)");
+    console.log("checkout <id> - check out an issue");
     console.log("exit - Exit TermJira");
+}
+
+const commands = {
+    help: showHelp,
+    list: list_issues,
+    show: ([id]) => {
+        const currentIssue = get_current_issue()
+        if (!id && !currentIssue) {
+            console.log("No issue checked out.")
+            return
+        }
+        show_issue(id ? Number(id) : currentIssue.id)
+    },
+    checkout: ([id]) => checkout_issue(Number(id)),
+    create: () => {
+        const title = prompt("Title for the issue: ");
+        const description = prompt("Description for the issue: ");
+        const status = prompt("Status for the issue: ");
+        const priority = prompt("Priority for the issue: ");
+        const issue = create_issue(title, description, status, priority);
+        console.log(`tj> Issue created! ID: ${issue.id}`);
+    },
+    exit: () => {
+        console.log("Goodbye!")
+        rl.close()
+        return false
+    },
 }
 
 showWelcome()
 function askCommand() {
     const currentIssue = get_current_issue()
     rl.question(`${currentIssue ? `tj[#${currentIssue.id}]` : "tj"}> `, (answer) => {
-        if (answer.toLowerCase() === "help") {
-            showHelp()
-        }
-        else if (answer.toLowerCase() === "list") {
-            list_issues()
-        }
-        else if (answer.startsWith("checkout ")) {
-            const parts = answer.split(" ")
-            const issue_id = Number(parts[1])
-            checkout_issue(issue_id)
-        }
-        else if (answer.startsWith("show ")) {
-            const parts = answer.split(" ")
-            const issue_id = Number(parts[1])
-            show_issue(issue_id)
-        }
-        else if (answer.toLowerCase() === "create") {
-
-            const title = prompt("Title for the issue: ");
-            const description = prompt("Description for the issue: ");
-            const status = prompt("Status for the issue: ");
-            const priority = prompt("Priority for the issue: ");
-            const issue = create_issue(title, description, status, priority);
-            console.log(`tj> Issue created! ID: ${issue.id}`);
-        }
-        else if (answer === "exit") {
-            console.log("Goodbye!")
-            rl.close()
-            return
-        }
-        else {
+        const [command, ...args] = answer.trim().split(/\s+/)
+        const handler = commands[command.toLowerCase()]
+        if (!handler) {
             console.log("unknown command")
         }
-
+        else if (handler(args) === false) {
+            return
+        }
         askCommand()
     })
 }
