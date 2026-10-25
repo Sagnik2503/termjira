@@ -1,6 +1,6 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, checkout_issue, get_current_issue } = require('./issue')
+const { create_issue, list_issues, show_issue, checkout_issue, get_current_issue, edit_description, edit_title} = require('./issue')
 
 // seed issues for development
 create_issue("Learn JavaScript", "Practice functions")
@@ -51,6 +51,20 @@ const commands = {
         rl.close()
         return false
     },
+    edit: ([id, key, ...body])=>{
+        body=body.join(" ")
+        if(key==="title"){
+            const issue=edit_title(Number(id), body)
+            if (issue) console.log(`Title updated for issue #${id}`)
+        }
+        else if(key==="description"){
+            const issue = edit_description(Number(id), body)
+            if (issue) console.log(`Description updated for issue #${id}`)
+        }
+        else{
+            console.log("Invalid field. Use 'title' or 'description'.")
+        }
+    }
 }
 
 showWelcome()
