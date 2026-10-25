@@ -90,4 +90,21 @@ function update_status(id, new_status){
     return issue
 }
 
-module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status}
+const PRIORITIES = ["LOW", "MEDIUM", "HIGH"]
+
+function update_priority(id, new_priority){
+    const priority = String(new_priority ?? "").toUpperCase()
+    if(!PRIORITIES.includes(priority)){
+        console.log(`Invalid priority. Choose between "LOW", "MEDIUM", "HIGH"`)
+        return
+    }
+    const issue = issue_store.find(element => element.id === id)
+    if(!issue){
+        console.log("Issue DNE")
+        return
+    }
+    issue.priority=priority
+    return issue
+}
+
+module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority}
