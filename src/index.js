@@ -48,7 +48,7 @@ const commands = {
         const status = prompt("Status for the issue: ");
         const priority = prompt("Priority for the issue: ");
         const issue = create_issue(title, description, status, priority);
-        console.log(`tj> Issue created! ID: ${issue.id}`);
+        console.log(`Issue created! ID: ${issue.id}`);
     },
     exit: () => {
         console.log("Goodbye!")
@@ -70,7 +70,6 @@ const commands = {
         }
     },
     status: ([id, body])=>{
-        console.log(body)
         const issue=update_status(Number(id), body)
         if (issue) console.log(`Status changed to ${issue.status} for issue #${id}`)
     },
@@ -87,6 +86,7 @@ const commands = {
 showWelcome()
 function askCommand() {
     const currentIssue = get_current_issue()
+    console.log()
     rl.question(`${currentIssue ? `tj[#${currentIssue.id}]` : "tj"}> `, (answer) => {
         const [command, ...args] = answer.trim().split(/\s+/)
         const handler = commands[command.toLowerCase()]

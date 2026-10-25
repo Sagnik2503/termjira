@@ -48,7 +48,7 @@ function show_issue(id) {
     Description: ${issue.description}
     Status:      ${issue.status}
     Priority:     ${issue.priority}
-    `)
+    `.trimEnd())
 }
 
 function get_current_issue() {
