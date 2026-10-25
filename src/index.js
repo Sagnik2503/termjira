@@ -1,6 +1,6 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue } = require('./issue')
+const { create_issue, list_issues, show_issue, checkout_issue, get_current_issue } = require('./issue')
 
 // seed issues for development
 create_issue("Learn JavaScript", "Practice functions")
@@ -27,13 +27,18 @@ function showHelp() {
 
 showWelcome()
 function askCommand() {
-
-    rl.question('tj> ', (answer) => {
+    const currentIssue = get_current_issue()
+    rl.question(`${currentIssue ? `tj[#${currentIssue.id}]` : "tj"}> `, (answer) => {
         if (answer.toLowerCase() === "help") {
             showHelp()
         }
         else if (answer.toLowerCase() === "list") {
             list_issues()
+        }
+        else if (answer.startsWith("checkout ")) {
+            const parts = answer.split(" ")
+            const issue_id = Number(parts[1])
+            checkout_issue(issue_id)
         }
         else if (answer.startsWith("show ")) {
             const parts = answer.split(" ")

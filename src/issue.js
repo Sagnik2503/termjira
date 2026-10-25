@@ -9,7 +9,17 @@ class Issue {
 }
 
 const issue_store = []
+let currentIssue=null
 
+function checkout_issue(id){
+    const issue = issue_store.find(element => element.id === id)
+    if (!issue) {
+        console.log("Issue does not exist.")
+        return
+    }
+    currentIssue=issue
+    console.log(`Checked out issue #${currentIssue.id}: ${currentIssue.title}`)
+}
 function create_issue(title, description, status = "TODO", priority = "MEDIUM") {
     const issue = new Issue(issue_store.length + 1, title, description, status, priority)
     issue_store.push(issue)
@@ -40,4 +50,8 @@ function show_issue(id) {
     `)
 }
 
-module.exports = { create_issue, list_issues, show_issue }
+function get_current_issue() {
+    return currentIssue
+}
+
+module.exports = { create_issue, list_issues, show_issue, checkout_issue, get_current_issue }
