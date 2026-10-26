@@ -1,10 +1,11 @@
 class Issue {
-    constructor(id, title, description, status, priority) {
+    constructor(id, title, description, status, priority, labels) {
         this.id = id
         this.title = title
         this.description = description
         this.status = status
         this.priority = priority
+        this.labels = labels
     }
 }
 
@@ -24,7 +25,12 @@ function checkout_issue(id){
 const STATUSES = ["TODO", "IN_PROGRESS", "CLOSED"]
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"]
 
-function create_issue(title, description, status = "TODO", priority = "MEDIUM") {
+function normalize_labels(labels) {
+    const list = Array.isArray(labels) ? labels : String(labels ?? "").split(",")
+    return list.map(label => String(label).trim()).filter(Boolean)
+}
+
+function create_issue(title, description, status = "TODO", priority = "MEDIUM", labels = []) {
     title = String(title ?? "").trim()
     description = String(description ?? "").trim()
     status = String(status ?? "").trim().toUpperCase() || "TODO"
@@ -47,7 +53,7 @@ function create_issue(title, description, status = "TODO", priority = "MEDIUM") 
         return
     }
 
-    const issue = new Issue(next_id++, title, description, status, priority)
+    const issue = new Issue(next_id++, title, description, status, priority, normalize_labels(labels))
     issue_store.push(issue)
     return issue
 }
@@ -57,7 +63,8 @@ function format_issue(issue) {
 Title:       ${issue.title}
 Description: ${issue.description}
 Status:      ${issue.status}
-Priority:    ${issue.priority}`
+Priority:    ${issue.priority}
+Labels:      ${issue.labels.join(", ")}`
 }
 
 function list_issues() {
@@ -174,4 +181,4 @@ function filter_issues(status, priority, title, description){
     )
 }
 
-module.exports = { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues}
+module.exports = { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues, STATUSES, PRIORITIES}

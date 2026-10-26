@@ -1,26 +1,26 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 
 // seed issues for development
 // Normal issues
-create_issue("Learn JavaScript", "Practice functions", "TODO", "HIGH")
-create_issue("Build TermJira", "Implement issue creation", "IN_PROGRESS", "HIGH")
-create_issue("Write unit tests", "Test CRUD operations", "TODO", "MEDIUM")
-create_issue("Update documentation", "Document CLI commands", "CLOSED", "LOW")
+create_issue("Learn JavaScript", "Practice functions", "TODO", "HIGH", ["learning"])
+create_issue("Build TermJira", "Implement issue creation", "IN_PROGRESS", "HIGH", ["feature", "backend"])
+create_issue("Write unit tests", "Test CRUD operations", "TODO", "MEDIUM", ["testing"])
+create_issue("Update documentation", "Document CLI commands", "CLOSED", "LOW", ["docs"])
 
 // Duplicate and case-insensitive search
-create_issue("Fix login bug", "Fix authentication", "IN_PROGRESS", "HIGH")
-create_issue("Fix Login Bug", "Handle invalid credentials", "TODO", "LOW")
+create_issue("Fix login bug", "Fix authentication", "IN_PROGRESS", "HIGH", ["bug", "auth"])
+create_issue("Fix Login Bug", "Handle invalid credentials", "TODO", "LOW", ["bug", "auth"])
 
 // Similar keywords
-create_issue("Improve search", "Support partial matches", "TODO", "MEDIUM")
-create_issue("Search by priority", "Filter issues by priority", "CLOSED", "HIGH")
+create_issue("Improve search", "Support partial matches", "TODO", "MEDIUM", ["search"])
+create_issue("Search by priority", "Filter issues by priority", "CLOSED", "HIGH", ["search"])
 
 // Special characters and numbers
-create_issue("Handle --status flag", "Parse CLI arguments", "IN_PROGRESS", "MEDIUM")
-create_issue("Fix #123 error", "Resolve issue reference bug", "TODO", "LOW")
+create_issue("Handle --status flag", "Parse CLI arguments", "IN_PROGRESS", "MEDIUM", ["cli"])
+create_issue("Fix #123 error", "Resolve issue reference bug", "TODO", "LOW", ["bug"])
 
 // creates an interface for terminal input output
 const rl = readline.createInterface({
@@ -45,6 +45,15 @@ function showHelp() {
     console.log("exit - Exit TermJira");
 }
 
+function askField(name, values, fallback) {
+    while (true) {
+        const value = String(prompt(`${name} for the issue (${values.join(", ")}): `) ?? "").trim().toUpperCase()
+        if (!value) return fallback
+        if (values.includes(value)) return value
+        console.log(`Invalid ${name.toLowerCase()}. Choose between ${values.join(", ")}`)
+    }
+}
+
 const commands = {
     help: showHelp,
     list: list_issues,
@@ -60,9 +69,10 @@ const commands = {
     create: () => {
         const title = prompt("Title for the issue: ");
         const description = prompt("Description for the issue: ");
-        const status = prompt("Status for the issue: ");
-        const priority = prompt("Priority for the issue: ");
-        const issue = create_issue(title, description, status, priority);
+        const status = askField("Status", STATUSES, "TODO");
+        const priority = askField("Priority", PRIORITIES, "MEDIUM");
+        const labels = prompt("Labels for the issue (optional, comma separated): ");
+        const issue = create_issue(title, description, status, priority, labels);
         if (issue) console.log(`Issue created! ID: ${issue.id}`);
     },
     exit: () => {
@@ -117,7 +127,7 @@ const commands = {
         } else {
             result.forEach(issue => {
                 console.log(
-                    `#${issue.id} | ${issue.title} | Status: ${issue.status} | Priority: ${issue.priority}`
+                    `#${issue.id} | ${issue.title} | Status: ${issue.status} | Priority: ${issue.priority} | Labels: ${issue.labels.join(", ")}`
                 )
             })
         }
