@@ -7,9 +7,9 @@ A command-line issue tracking tool inspired by Jira, built with JavaScript and N
 - Create and manage issues.
 - List all issues.
 - View individual issue details.
-- Check out a ticket and work within its context.
 - Update issue status and priority.
-- Track issues through a simple workflow: `TODO`, `IN_PROGRESS`, and `DONE`.
+- Add, remove, list, and filter by labels.
+- Track issues through a simple workflow: `TODO`, `IN_PROGRESS`, and `CLOSED`.
 
 ## Tech Stack
 
@@ -38,13 +38,16 @@ A command-line issue tracking tool inspired by Jira, built with JavaScript and N
 | Command | Description |
 |---|---|
 | `help` | Display available commands |
-| `create` | Create a new issue |
+| `create` | Create a new issue (prompts for title, description, status, priority, labels) |
 | `list` | List all issues |
-| `show <id>` | View issue details |
-| `checkout <id>` | Open a ticket context |
-| `status <status>` | Update the checked-out ticket's status |
-| `priority <priority>` | Update the checked-out ticket's priority |
-| `exit` | Exit the current context or application |
+| `show <id>` | View an issue |
+| `update <id> <title\|description\|status\|priority> <value>` | Update an issue field |
+| `delete <id> [--force]` | Delete an issue (asks for confirmation unless `--force`) |
+| `label list` | List all labels in use with issue counts |
+| `label add <id> <label>[,<label>...]` | Add labels to an issue |
+| `label remove <id> <label>[,<label>...]` | Remove labels from an issue |
+| `filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]` | Filter issues; repeat `--label` to require every label |
+| `exit` | Exit TermJira |
 
 *Commands are being implemented incrementally; availability depends on the current development stage.*
 

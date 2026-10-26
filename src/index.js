@@ -1,6 +1,6 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues, STATUSES, PRIORITIES} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 
 // seed issues for development
@@ -37,12 +37,18 @@ function showHelp() {
     console.log("help - Show available commands");
     console.log("create - create a new issue");
     console.log("list - list all issues");
-    console.log("show [id] - show an issue (defaults to the checked-out issue)");
-    console.log("checkout <id> - check out an issue");
+    console.log("show <id> - show an issue");
     console.log("update <id> <title|description|status|priority> <value> - update an issue field");
-    console.log("delete <id> - delete an issue");
-    console.log('filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] - filter issues');
+    console.log("delete <id> [--force] - delete an issue (asks for confirmation unless --force)");
+    console.log("label list - list all labels in use");
+    console.log("label add <id> <label>[,<label>...] - add labels to an issue");
+    console.log("label remove <id> <label>[,<label>...] - remove labels from an issue");
+    console.log('filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>] - filter issues');
     console.log("exit - Exit TermJira");
+}
+
+function confirm(question) {
+    return new Promise(resolve => rl.question(question, answer => resolve(answer)))
 }
 
 function askField(name, values, fallback) {
@@ -58,14 +64,12 @@ const commands = {
     help: showHelp,
     list: list_issues,
     show: ([id]) => {
-        const currentIssue = get_current_issue()
-        if (!id && !currentIssue) {
-            console.log("No issue checked out.")
+        if (!id) {
+            console.log("Usage: show <id>")
             return
         }
-        show_issue(id ? Number(id) : currentIssue.id)
+        show_issue(Number(id))
     },
-    checkout: ([id]) => checkout_issue(Number(id)),
     create: () => {
         const title = prompt("Title for the issue: ");
         const description = prompt("Description for the issue: ");
@@ -95,9 +99,49 @@ const commands = {
         const issue = updater(Number(id), value.join(" "))
         if (issue) console.log(format_issue(issue))
     },
-    delete: ([id])=>{
-        const issue = delete_issue(Number(id))
-        if (issue) console.log(`Deleted issue #${issue.id}: ${issue.title}`)
+    delete: async (args)=>{
+        const id = Number(args[0])
+        const force = args.includes("--force")
+        if (!Number.isInteger(id)) {
+            console.log("Usage: delete <id> [--force]")
+            return
+        }
+        const issue = get_issue(id)
+        if (!issue) {
+            console.log("Issue DNE")
+            return
+        }
+        if (!force) {
+            const answer = String(await confirm(`Delete issue #${issue.id} "${issue.title}"? (y/N) `)).trim().toLowerCase()
+            if (answer !== "y" && answer !== "yes") {
+                console.log("Delete cancelled.")
+                return
+            }
+        }
+        const deleted = delete_issue(id)
+        if (deleted) console.log(`Deleted issue #${deleted.id}: ${deleted.title}`)
+    },
+    label: (args)=>{
+        const action = String(args[0] ?? "").toLowerCase()
+        if(action === "list"){
+            list_labels()
+            return
+        }
+        const id = Number(args[1])
+        if((action !== "add" && action !== "remove") || !Number.isInteger(id)){
+            console.log("Usage: label list | label add|remove <id> <label>[,<label>...]")
+            return
+        }
+        const labels = args.slice(2).join(" ")
+            .split(",")
+            .map(label => label.trim().replace(/^["']|["']$/g, ""))
+            .filter(Boolean)
+        if(labels.length === 0){
+            console.log(`Usage: label ${action} <id> <label>[,<label>...]`)
+            return
+        }
+        if(action === "add") add_labels(id, labels)
+        else remove_labels(id, labels)
     },
     filter: (args)=>{
         const flags={}
@@ -116,11 +160,18 @@ const commands = {
                     return
                 }
                 flags[key]=quoted[1]
+            } else if(key==="label"){
+                if(!raw){
+                    console.log("--label requires a value")
+                    return
+                }
+                flags.label=flags.label ?? []
+                flags.label.push(raw.replace(/^["']|["']$/g, ""))
             } else {
                 flags[key]=raw.replace(/^["']|["']$/g, "")
             }
         }
-        const result=filter_issues(flags.status, flags.priority, flags.title, flags.description)
+        const result=filter_issues(flags.status, flags.priority, flags.title, flags.description, flags.label)
         if (result === null) return
         if (result.length === 0) {
             console.log("No matching issues found.")
@@ -136,16 +187,16 @@ const commands = {
 
 showWelcome()
 function askCommand() {
-    const currentIssue = get_current_issue()
     console.log()
-    rl.question(`${currentIssue ? `tj[#${currentIssue.id}]` : "tj"}> `, (answer) => {
+    rl.question("tj> ", async (answer) => {
         const [command, ...args] = answer.trim().split(/\s+/)
         const handler = commands[command.toLowerCase()]
         if (!handler) {
             console.log("unknown command")
-        }
-        else if (handler(args) === false) {
-            return
+        } else {
+            const result = handler(args)
+            if (result === false) return
+            if (result instanceof Promise) await result
         }
         askCommand()
     })
