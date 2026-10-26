@@ -153,9 +153,11 @@ function delete_issue(id){
     return issue
 }
 
-function filter_issues(status, priority){
+function filter_issues(status, priority, title, description){
     status = String(status ?? "").trim().toUpperCase()
     priority = String(priority ?? "").trim().toUpperCase()
+    title = String(title ?? "").trim().toLowerCase()
+    description = String(description ?? "").trim().toLowerCase()
     if (status && !STATUSES.includes(status)) {
         console.log(`Invalid status. Choose between ${STATUSES.join(", ")}`)
         return null
@@ -166,7 +168,9 @@ function filter_issues(status, priority){
     }
     return issue_store.filter(element =>
         (!status || element.status === status) &&
-        (!priority || element.priority === priority)
+        (!priority || element.priority === priority) &&
+        (!title || element.title.toLowerCase().includes(title)) &&
+        (!description || element.description.toLowerCase().includes(description))
     )
 }
 

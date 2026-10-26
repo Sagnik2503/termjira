@@ -4,8 +4,23 @@ const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get
 const { markAsUncloneable } = require('worker_threads')
 
 // seed issues for development
-create_issue("Learn JavaScript", "Practice functions")
-create_issue("Build TermJira", "Implement issue creation")
+// Normal issues
+create_issue("Learn JavaScript", "Practice functions", "TODO", "HIGH")
+create_issue("Build TermJira", "Implement issue creation", "IN_PROGRESS", "HIGH")
+create_issue("Write unit tests", "Test CRUD operations", "TODO", "MEDIUM")
+create_issue("Update documentation", "Document CLI commands", "CLOSED", "LOW")
+
+// Duplicate and case-insensitive search
+create_issue("Fix login bug", "Fix authentication", "IN_PROGRESS", "HIGH")
+create_issue("Fix Login Bug", "Handle invalid credentials", "TODO", "LOW")
+
+// Similar keywords
+create_issue("Improve search", "Support partial matches", "TODO", "MEDIUM")
+create_issue("Search by priority", "Filter issues by priority", "CLOSED", "HIGH")
+
+// Special characters and numbers
+create_issue("Handle --status flag", "Parse CLI arguments", "IN_PROGRESS", "MEDIUM")
+create_issue("Fix #123 error", "Resolve issue reference bug", "TODO", "LOW")
 
 // creates an interface for terminal input output
 const rl = readline.createInterface({
@@ -26,7 +41,7 @@ function showHelp() {
     console.log("checkout <id> - check out an issue");
     console.log("update <id> <title|description|status|priority> <value> - update an issue field");
     console.log("delete <id> - delete an issue");
-    console.log("filter [--status <status>] [--priority <priority>] - filter issues");
+    console.log('filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] - filter issues');
     console.log("exit - Exit TermJira");
 }
 
@@ -75,17 +90,27 @@ const commands = {
         if (issue) console.log(`Deleted issue #${issue.id}: ${issue.title}`)
     },
     filter: (args)=>{
-        let status=null
-        let priority=null
+        const flags={}
         for(let i=0;i<args.length;i++){
-            if(args[i]==="--status" && args[i+1] && !args[i+1].startsWith("--")){
-                status=args[i+1]
+            if(!args[i].startsWith("--")) continue
+            const key=args[i].slice(2)
+            const values=[]
+            while(i+1<args.length && !args[i+1].startsWith("--")){
+                values.push(args[++i])
             }
-            if(args[i]==="--priority" && args[i+1] && !args[i+1].startsWith("--")){
-                priority=args[i+1]
+            const raw=values.join(" ")
+            if(key==="title" || key==="description"){
+                const quoted=raw.match(/^"([^"]*)"$/) || raw.match(/^'([^']*)'$/)
+                if(!quoted){
+                    console.log(`--${key} must be quoted, e.g. --${key} "login page"`)
+                    return
+                }
+                flags[key]=quoted[1]
+            } else {
+                flags[key]=raw.replace(/^["']|["']$/g, "")
             }
         }
-        const result=filter_issues(status, priority)
+        const result=filter_issues(flags.status, flags.priority, flags.title, flags.description)
         if (result === null) return
         if (result.length === 0) {
             console.log("No matching issues found.")
