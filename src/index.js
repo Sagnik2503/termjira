@@ -1,6 +1,7 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue, edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues} = require('./issue')
+const { markAsUncloneable } = require('worker_threads')
 
 // seed issues for development
 create_issue("Learn JavaScript", "Practice functions")
@@ -25,6 +26,7 @@ function showHelp() {
     console.log("checkout <id> - check out an issue");
     console.log("update <id> <title|description|status|priority> <value> - update an issue field");
     console.log("delete <id> - delete an issue");
+    console.log("filter [--status <status>] [--priority <priority>] - filter issues");
     console.log("exit - Exit TermJira");
 }
 
@@ -71,6 +73,29 @@ const commands = {
     delete: ([id])=>{
         const issue = delete_issue(Number(id))
         if (issue) console.log(`Deleted issue #${issue.id}: ${issue.title}`)
+    },
+    filter: (args)=>{
+        let status=null
+        let priority=null
+        for(let i=0;i<args.length;i++){
+            if(args[i]==="--status" && args[i+1] && !args[i+1].startsWith("--")){
+                status=args[i+1]
+            }
+            if(args[i]==="--priority" && args[i+1] && !args[i+1].startsWith("--")){
+                priority=args[i+1]
+            }
+        }
+        const result=filter_issues(status, priority)
+        if (result === null) return
+        if (result.length === 0) {
+            console.log("No matching issues found.")
+        } else {
+            result.forEach(issue => {
+                console.log(
+                    `#${issue.id} | ${issue.title} | Status: ${issue.status} | Priority: ${issue.priority}`
+                )
+            })
+        }
     }
 }
 

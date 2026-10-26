@@ -153,4 +153,21 @@ function delete_issue(id){
     return issue
 }
 
-module.exports = { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue}
+function filter_issues(status, priority){
+    status = String(status ?? "").trim().toUpperCase()
+    priority = String(priority ?? "").trim().toUpperCase()
+    if (status && !STATUSES.includes(status)) {
+        console.log(`Invalid status. Choose between ${STATUSES.join(", ")}`)
+        return null
+    }
+    if (priority && !PRIORITIES.includes(priority)) {
+        console.log(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
+        return null
+    }
+    return issue_store.filter(element =>
+        (!status || element.status === status) &&
+        (!priority || element.priority === priority)
+    )
+}
+
+module.exports = { create_issue, list_issues, show_issue, format_issue, checkout_issue, get_current_issue , edit_description, edit_title, update_status, update_priority, delete_issue, filter_issues}
