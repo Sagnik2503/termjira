@@ -1,3 +1,7 @@
+const { readFileSync, writeFileSync } = require('node:fs')
+
+const STORE_PATH = "issue_store.json"
+
 class Issue {
     constructor(id, title, description, status, priority, labels) {
         this.id = id
@@ -11,9 +15,6 @@ class Issue {
     updated_timestamp=this.created_timestamp
 
 }
-
-const issue_store = []
-let next_id=1
 
 const STATUSES = ["TODO", "IN_PROGRESS", "CLOSED"]
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"]
@@ -29,6 +30,32 @@ function normalize_labels(labels) {
         result.push(value)
     }
     return result
+}
+
+function read_issues() {
+    try {
+        const data = JSON.parse(readFileSync(STORE_PATH, "utf8"))
+        if (!Array.isArray(data)) {
+            console.log("Issue store is not a list, starting empty.")
+            return []
+        }
+        return data
+    } catch (error) {
+        if (error.code !== "ENOENT") console.log(`Could not load issues: ${error.message}`)
+        return []
+    }
+}
+
+function write_issues(issues) {
+    try {
+        writeFileSync(STORE_PATH, JSON.stringify(issues, null, 2), "utf8")
+    } catch (error) {
+        console.log(`Could not save issues: ${error.message}`)
+    }
+}
+
+function next_id(issues) {
+    return issues.reduce((max, issue) => Math.max(max, issue.id), 0) + 1
 }
 
 function create_issue(title, description, status = "TODO", priority = "MEDIUM", labels = []) {
@@ -54,8 +81,10 @@ function create_issue(title, description, status = "TODO", priority = "MEDIUM", 
         return
     }
 
-    const issue = new Issue(next_id++, title, description, status, priority, normalize_labels(labels))
-    issue_store.push(issue)
+    const issues = read_issues()
+    const issue = new Issue(next_id(issues), title, description, status, priority, normalize_labels(labels))
+    issues.push(issue)
+    write_issues(issues)
     return issue
 }
 
@@ -71,15 +100,17 @@ Updated:     ${new Date(issue.updated_timestamp).toLocaleString()}`
 }
 
 function list_issues() {
-    if (issue_store.length === 0) {
+    const issues = read_issues()
+    if (issues.length === 0) {
         console.log("No issues found")
         return
     }
-    console.log(issue_store.map(format_issue).join("\n\n"))
+
+    console.log(issues.map(format_issue).join("\n\n"))
 }
 
 function show_issue(id) {
-    const issue = issue_store.find(element => element.id === id)
+    const issue = get_issue(id)
     if (!issue) {
         console.log("Issue not found.")
         return
@@ -87,78 +118,87 @@ function show_issue(id) {
     console.log(format_issue(issue))
 }
 
-function edit_title(id,title){
+function edit_title(id, title) {
     title = String(title ?? "").trim()
-    if(!title){
+    if (!title) {
         console.log("Title cannot be empty.")
         return
     }
-    const issue = issue_store.find(element => element.id === id)
-    if(!issue){
+    const issues = read_issues()
+    const issue = issues.find(element => element.id === id)
+    if (!issue) {
         console.log("Issue DNE")
         return
     }
-    issue.title=title
-    issue.updated_timestamp=Date.now()
+    issue.title = title
+    issue.updated_timestamp = Date.now()
+    write_issues(issues)
     return issue
 }
 
-function edit_description(id,description){
+function edit_description(id, description) {
     description = String(description ?? "").trim()
-    if(!description){
+    if (!description) {
         console.log("Description cannot be empty.")
         return
     }
-    const issue = issue_store.find(element => element.id === id)
-    if(!issue){
+    const issues = read_issues()
+    const issue = issues.find(element => element.id === id)
+    if (!issue) {
         console.log("Issue DNE")
         return
     }
-    issue.description=description
-    issue.updated_timestamp=Date.now()
+    issue.description = description
+    issue.updated_timestamp = Date.now()
+    write_issues(issues)
     return issue
 }
 
-function update_status(id, new_status){
-    const issue = issue_store.find(element => element.id === id)
-    if(!STATUSES.includes(new_status)){
+function update_status(id, new_status) {
+    if (!STATUSES.includes(new_status)) {
         console.log(`New status name is incorrect. Choose between "IN_PROGRESS", "TODO", "CLOSED"`)
         return
     }
-    if(!issue){
+    const issues = read_issues()
+    const issue = issues.find(element => element.id === id)
+    if (!issue) {
         console.log("Issue DNE")
         return
     }
-    issue.status=new_status
-    issue.updated_timestamp=Date.now()
+    issue.status = new_status
+    issue.updated_timestamp = Date.now()
+    write_issues(issues)
     return issue
 }
 
-function update_priority(id, new_priority){
+function update_priority(id, new_priority) {
     const priority = String(new_priority ?? "").toUpperCase()
-    if(!PRIORITIES.includes(priority)){
+    if (!PRIORITIES.includes(priority)) {
         console.log(`Invalid priority. Choose between "LOW", "MEDIUM", "HIGH"`)
         return
     }
-    const issue = issue_store.find(element => element.id === id)
-    if(!issue){
+    const issues = read_issues()
+    const issue = issues.find(element => element.id === id)
+    if (!issue) {
         console.log("Issue DNE")
         return
     }
-    issue.priority=priority
-    issue.updated_timestamp=Date.now()
+    issue.priority = priority
+    issue.updated_timestamp = Date.now()
+    write_issues(issues)
     return issue
 }
 
-function add_labels(id, labels){
-    const issue = issue_store.find(element => element.id === id)
-    if(!issue){
+function add_labels(id, labels) {
+    const issues = read_issues()
+    const issue = issues.find(element => element.id === id)
+    if (!issue) {
         console.log("Issue DNE")
         return
     }
     let changed = false
-    for(const label of normalize_labels(labels)){
-        if(issue.labels.includes(label)){
+    for (const label of normalize_labels(labels)) {
+        if (issue.labels.includes(label)) {
             console.log(`Issue #${issue.id} already has label "${label}".`)
             continue
         }
@@ -166,20 +206,24 @@ function add_labels(id, labels){
         console.log(`Added "${label}" to issue #${issue.id}.`)
         changed = true
     }
-    if(changed) issue.updated_timestamp=Date.now()
+    if (changed) {
+        issue.updated_timestamp = Date.now()
+        write_issues(issues)
+    }
     return issue
 }
 
-function remove_labels(id, labels){
-    const issue = issue_store.find(element => element.id === id)
-    if(!issue){
+function remove_labels(id, labels) {
+    const issues = read_issues()
+    const issue = issues.find(element => element.id === id)
+    if (!issue) {
         console.log("Issue DNE")
         return
     }
     let changed = false
-    for(const label of normalize_labels(labels)){
+    for (const label of normalize_labels(labels)) {
         const index = issue.labels.indexOf(label)
-        if(index === -1){
+        if (index === -1) {
             console.log(`Issue #${issue.id} does not have label "${label}".`)
             continue
         }
@@ -187,24 +231,27 @@ function remove_labels(id, labels){
         console.log(`Removed "${label}" from issue #${issue.id}.`)
         changed = true
     }
-    if(changed) issue.updated_timestamp=Date.now()
+    if (changed) {
+        issue.updated_timestamp = Date.now()
+        write_issues(issues)
+    }
     return issue
 }
 
-function list_labels(){
+function list_labels() {
     const counts = new Map()
-    for(const issue of issue_store){
-        for(const label of issue.labels){
+    for (const issue of read_issues()) {
+        for (const label of issue.labels) {
             counts.set(label, (counts.get(label) ?? 0) + 1)
         }
     }
-    if(counts.size === 0){
+    if (counts.size === 0) {
         console.log("No labels in use.")
         return
     }
     const names = [...counts.keys()].sort()
     const width = Math.max(...names.map(name => name.length))
-    for(const name of names){
+    for (const name of names) {
         const count = counts.get(name)
         console.log(`${name.padEnd(width)}  ${count} ${count === 1 ? "issue" : "issues"}`)
     }
@@ -212,21 +259,27 @@ function list_labels(){
     console.log(`${counts.size} ${counts.size === 1 ? "label" : "labels"} in use.`)
 }
 
-function get_issue(id){
-    return issue_store.find(element => element.id === id)
+function get_issue(id) {
+    return read_issues().find(element => element.id === id)
 }
 
-function delete_issue(id){
-    const index = issue_store.findIndex(element => element.id === id)
-    if(index === -1){
+function delete_issue(id) {
+    const issues = read_issues()
+    const index = issues.findIndex(element => element.id === id)
+    if (index === -1) {
         console.log("Issue DNE")
         return
     }
-    const [issue] = issue_store.splice(index, 1)
+    const [issue] = issues.splice(index, 1)
+    write_issues(issues)
     return issue
 }
 
-function filter_issues(status, priority, title, description, labels = []){
+function count_issues() {
+    return read_issues().length
+}
+
+function filter_issues(status, priority, title, description, labels = []) {
     status = String(status ?? "").trim().toUpperCase()
     priority = String(priority ?? "").trim().toUpperCase()
     title = String(title ?? "").trim().toLowerCase()
@@ -240,7 +293,7 @@ function filter_issues(status, priority, title, description, labels = []){
         console.log(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
         return null
     }
-    return issue_store.filter(element =>
+    return read_issues().filter(element =>
         (!status || element.status === status) &&
         (!priority || element.priority === priority) &&
         (!title || element.title.toLowerCase().includes(title)) &&
@@ -249,4 +302,4 @@ function filter_issues(status, priority, title, description, labels = []){
     )
 }
 
-module.exports = { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, STATUSES, PRIORITIES}
+module.exports = { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, count_issues, STATUSES, PRIORITIES }

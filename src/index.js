@@ -1,9 +1,10 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, STATUSES, PRIORITIES} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, count_issues, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 
-// seed issues for development
+// seed issues for development on an empty store only
+if (count_issues() === 0) {
 // Normal issues
 create_issue("Learn JavaScript", "Practice functions", "TODO", "HIGH", ["learning"])
 create_issue("Build TermJira", "Implement issue creation", "IN_PROGRESS", "HIGH", ["feature", "backend"])
@@ -21,6 +22,7 @@ create_issue("Search by priority", "Filter issues by priority", "CLOSED", "HIGH"
 // Special characters and numbers
 create_issue("Handle --status flag", "Parse CLI arguments", "IN_PROGRESS", "MEDIUM", ["cli"])
 create_issue("Fix #123 error", "Resolve issue reference bug", "TODO", "LOW", ["bug"])
+}
 
 // creates an interface for terminal input output
 const rl = readline.createInterface({
