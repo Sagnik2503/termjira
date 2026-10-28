@@ -99,6 +99,11 @@ Created:     ${new Date(issue.created_timestamp).toLocaleString()}
 Updated:     ${new Date(issue.updated_timestamp).toLocaleString()}`
 }
 
+function format_row(issue, show_created = false) {
+    const row = `#${issue.id} | ${issue.title} | Status: ${issue.status} | Priority: ${issue.priority} | Labels: ${issue.labels.join(", ")}`
+    return show_created ? `${row} | Created: ${new Date(issue.created_timestamp).toLocaleDateString()}` : row
+}
+
 function list_issues() {
     const issues = read_issues()
     if (issues.length === 0) {
@@ -279,6 +284,27 @@ function count_issues() {
     return read_issues().length
 }
 
+const SORT_KEYS = {
+    id: issue => issue.id,
+    priority: issue => PRIORITIES.indexOf(issue.priority),
+    status: issue => STATUSES.indexOf(issue.status),
+    created: issue => issue.created_timestamp,
+}
+
+function sort_issues(by = "id", order = "asc", issues = read_issues()) {
+    const key = SORT_KEYS[by]
+    if (!key) {
+        console.log(`Invalid sort field. Choose between ${Object.keys(SORT_KEYS).join(", ")}`)
+        return null
+    }
+    if (order !== "asc" && order !== "desc") {
+        console.log("Invalid sort order. Choose between asc, desc")
+        return null
+    }
+    const direction = order === "asc" ? 1 : -1
+    return [...issues].sort((a, b) => (key(a) - key(b)) * direction || a.id - b.id)
+}
+
 function filter_issues(status, priority, title, description, labels = []) {
     status = String(status ?? "").trim().toUpperCase()
     priority = String(priority ?? "").trim().toUpperCase()
@@ -302,4 +328,4 @@ function filter_issues(status, priority, title, description, labels = []) {
     )
 }
 
-module.exports = { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, count_issues, STATUSES, PRIORITIES }
+module.exports = { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, STATUSES, PRIORITIES }

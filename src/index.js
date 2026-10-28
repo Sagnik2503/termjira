@@ -1,6 +1,6 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, count_issues, STATUSES, PRIORITIES} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 
 // seed issues for development on an empty store only
@@ -46,6 +46,7 @@ function showHelp() {
     console.log("label add <id> <label>[,<label>...] - add labels to an issue");
     console.log("label remove <id> <label>[,<label>...] - remove labels from an issue");
     console.log('filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>] - filter issues');
+    console.log("sort [--by id|priority|status|created] [--order asc|desc] - sort issues");
     console.log("exit - Exit TermJira");
 }
 
@@ -145,6 +146,24 @@ const commands = {
         if(action === "add") add_labels(id, labels)
         else remove_labels(id, labels)
     },
+    sort: (args)=>{
+        const options={}
+        for(let i=0;i<args.length;i+=2){
+            const flag=args[i]
+            if((flag!=="--by" && flag!=="--order") || args[i+1]===undefined || args[i+1].startsWith("--")){
+                console.log("Usage: sort [--by id|priority|status|created] [--order asc|desc]")
+                return
+            }
+            options[flag.slice(2)]=args[i+1]
+        }
+        const result=sort_issues(options.by, options.order)
+        if (result === null) return
+        if (result.length === 0) {
+            console.log("No issues found")
+            return
+        }
+        result.forEach(issue => console.log(format_row(issue, true)))
+    },
     filter: (args)=>{
         const flags={}
         for(let i=0;i<args.length;i++){
@@ -178,11 +197,7 @@ const commands = {
         if (result.length === 0) {
             console.log("No matching issues found.")
         } else {
-            result.forEach(issue => {
-                console.log(
-                    `#${issue.id} | ${issue.title} | Status: ${issue.status} | Priority: ${issue.priority} | Labels: ${issue.labels.join(", ")}`
-                )
-            })
+            result.forEach(issue => console.log(format_row(issue)))
         }
     }
 }
