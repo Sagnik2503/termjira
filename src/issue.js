@@ -7,6 +7,9 @@ class Issue {
         this.priority = priority
         this.labels = labels
     }
+    created_timestamp=Date.now()
+    updated_timestamp=this.created_timestamp
+
 }
 
 const issue_store = []
@@ -62,7 +65,9 @@ Title:       ${issue.title}
 Description: ${issue.description}
 Status:      ${issue.status}
 Priority:    ${issue.priority}
-Labels:      ${issue.labels.length ? issue.labels.join(", ") : "(none)"}`
+Labels:      ${issue.labels.length ? issue.labels.join(", ") : "(none)"}
+Created:     ${new Date(issue.created_timestamp).toLocaleString()}
+Updated:     ${new Date(issue.updated_timestamp).toLocaleString()}`
 }
 
 function list_issues() {
@@ -94,6 +99,7 @@ function edit_title(id,title){
         return
     }
     issue.title=title
+    issue.updated_timestamp=Date.now()
     return issue
 }
 
@@ -109,6 +115,7 @@ function edit_description(id,description){
         return
     }
     issue.description=description
+    issue.updated_timestamp=Date.now()
     return issue
 }
 
@@ -123,6 +130,7 @@ function update_status(id, new_status){
         return
     }
     issue.status=new_status
+    issue.updated_timestamp=Date.now()
     return issue
 }
 
@@ -138,6 +146,7 @@ function update_priority(id, new_priority){
         return
     }
     issue.priority=priority
+    issue.updated_timestamp=Date.now()
     return issue
 }
 
@@ -147,6 +156,7 @@ function add_labels(id, labels){
         console.log("Issue DNE")
         return
     }
+    let changed = false
     for(const label of normalize_labels(labels)){
         if(issue.labels.includes(label)){
             console.log(`Issue #${issue.id} already has label "${label}".`)
@@ -154,7 +164,9 @@ function add_labels(id, labels){
         }
         issue.labels.push(label)
         console.log(`Added "${label}" to issue #${issue.id}.`)
+        changed = true
     }
+    if(changed) issue.updated_timestamp=Date.now()
     return issue
 }
 
@@ -164,6 +176,7 @@ function remove_labels(id, labels){
         console.log("Issue DNE")
         return
     }
+    let changed = false
     for(const label of normalize_labels(labels)){
         const index = issue.labels.indexOf(label)
         if(index === -1){
@@ -172,7 +185,9 @@ function remove_labels(id, labels){
         }
         issue.labels.splice(index, 1)
         console.log(`Removed "${label}" from issue #${issue.id}.`)
+        changed = true
     }
+    if(changed) issue.updated_timestamp=Date.now()
     return issue
 }
 
