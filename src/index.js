@@ -3,6 +3,7 @@ const prompt = require("prompt-sync")()
 const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 const { log_error } = require('./colors')
+const { showWelcome } = require('./banner')
 
 // seed issues for development on an empty store only
 if (count_issues() === 0) {
@@ -30,10 +31,6 @@ const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
-
-function showWelcome() {
-    console.log("Welcome to TermJira!");
-}
 
 function showHelp() {
     console.log("Available commands:");

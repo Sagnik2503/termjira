@@ -26,8 +26,12 @@ function color_label(label) {
     return pc.cyan(label)
 }
 
+function color_logo(text) {
+    return pc.bold(pc.cyan(text))
+}
+
 function log_error(message) {
     console.log(pc.red(message))
 }
 
-module.exports = { color_priority, color_status, color_label, log_error }
+module.exports = { color_priority, color_status, color_label, color_logo, log_error }
