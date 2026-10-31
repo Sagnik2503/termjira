@@ -7,8 +7,13 @@ describe("showWelcome", () => {
     afterEach(() => vi.restoreAllMocks());
 
     it("prints the logo followed by a blank line", () => {
+        // Arrange
         const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        // Act
         showWelcome();
+
+        // Assert
         const printed = log.mock.calls.map(([line]) => stripAnsi(line ?? ""));
         expect(printed).toEqual([...LOGO, ""]);
     });
