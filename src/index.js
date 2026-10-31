@@ -2,6 +2,7 @@ const readline = require('readline')
 const prompt = require("prompt-sync")()
 const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
+const { log_error } = require('./colors')
 
 // seed issues for development on an empty store only
 if (count_issues() === 0) {
@@ -59,7 +60,7 @@ function askField(name, values, fallback) {
         const value = String(prompt(`${name} for the issue (${values.join(", ")}): `) ?? "").trim().toUpperCase()
         if (!value) return fallback
         if (values.includes(value)) return value
-        console.log(`Invalid ${name.toLowerCase()}. Choose between ${values.join(", ")}`)
+        log_error(`Invalid ${name.toLowerCase()}. Choose between ${values.join(", ")}`)
     }
 }
 
@@ -68,7 +69,7 @@ const commands = {
     list: list_issues,
     show: ([id]) => {
         if (!id) {
-            console.log("Usage: show <id>")
+            log_error("Usage: show <id>")
             return
         }
         show_issue(Number(id))
@@ -96,7 +97,7 @@ const commands = {
         }
         const updater = fields[String(field).toLowerCase()]
         if (!updater) {
-            console.log("Invalid field. Use title, description, status, or priority.")
+            log_error("Invalid field. Use title, description, status, or priority.")
             return
         }
         const issue = updater(Number(id), value.join(" "))
@@ -106,12 +107,12 @@ const commands = {
         const id = Number(args[0])
         const force = args.includes("--force")
         if (!Number.isInteger(id)) {
-            console.log("Usage: delete <id> [--force]")
+            log_error("Usage: delete <id> [--force]")
             return
         }
         const issue = get_issue(id)
         if (!issue) {
-            console.log("Issue DNE")
+            log_error("Issue DNE")
             return
         }
         if (!force) {
@@ -132,7 +133,7 @@ const commands = {
         }
         const id = Number(args[1])
         if((action !== "add" && action !== "remove") || !Number.isInteger(id)){
-            console.log("Usage: label list | label add|remove <id> <label>[,<label>...]")
+            log_error("Usage: label list | label add|remove <id> <label>[,<label>...]")
             return
         }
         const labels = args.slice(2).join(" ")
@@ -140,7 +141,7 @@ const commands = {
             .map(label => label.trim().replace(/^["']|["']$/g, ""))
             .filter(Boolean)
         if(labels.length === 0){
-            console.log(`Usage: label ${action} <id> <label>[,<label>...]`)
+            log_error(`Usage: label ${action} <id> <label>[,<label>...]`)
             return
         }
         if(action === "add") add_labels(id, labels)
@@ -151,7 +152,7 @@ const commands = {
         for(let i=0;i<args.length;i+=2){
             const flag=args[i]
             if((flag!=="--by" && flag!=="--order") || args[i+1]===undefined || args[i+1].startsWith("--")){
-                console.log("Usage: sort [--by id|priority|status|created] [--order asc|desc]")
+                log_error("Usage: sort [--by id|priority|status|created] [--order asc|desc]")
                 return
             }
             options[flag.slice(2)]=args[i+1]
@@ -177,13 +178,13 @@ const commands = {
             if(key==="title" || key==="description"){
                 const quoted=raw.match(/^"([^"]*)"$/) || raw.match(/^'([^']*)'$/)
                 if(!quoted){
-                    console.log(`--${key} must be quoted, e.g. --${key} "login page"`)
+                    log_error(`--${key} must be quoted, e.g. --${key} "login page"`)
                     return
                 }
                 flags[key]=quoted[1]
             } else if(key==="label"){
                 if(!raw){
-                    console.log("--label requires a value")
+                    log_error("--label requires a value")
                     return
                 }
                 flags.label=flags.label ?? []
@@ -209,7 +210,7 @@ function askCommand() {
         const [command, ...args] = answer.trim().split(/\s+/)
         const handler = commands[command.toLowerCase()]
         if (!handler) {
-            console.log("unknown command")
+            log_error("unknown command")
         } else {
             const result = handler(args)
             if (result === false) return

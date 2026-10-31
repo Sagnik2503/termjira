@@ -1,4 +1,5 @@
 const { readFileSync, writeFileSync } = require('node:fs')
+const { color_priority, color_status, color_label, log_error } = require('./colors')
 
 const STORE_PATH = "issue_store.json"
 
@@ -36,12 +37,12 @@ function read_issues() {
     try {
         const data = JSON.parse(readFileSync(STORE_PATH, "utf8"))
         if (!Array.isArray(data)) {
-            console.log("Issue store is not a list, starting empty.")
+            log_error("Issue store is not a list, starting empty.")
             return []
         }
         return data
     } catch (error) {
-        if (error.code !== "ENOENT") console.log(`Could not load issues: ${error.message}`)
+        if (error.code !== "ENOENT") log_error(`Could not load issues: ${error.message}`)
         return []
     }
 }
@@ -50,7 +51,7 @@ function write_issues(issues) {
     try {
         writeFileSync(STORE_PATH, JSON.stringify(issues, null, 2), "utf8")
     } catch (error) {
-        console.log(`Could not save issues: ${error.message}`)
+        log_error(`Could not save issues: ${error.message}`)
     }
 }
 
@@ -65,19 +66,19 @@ function create_issue(title, description, status = "TODO", priority = "MEDIUM", 
     priority = String(priority ?? "").trim().toUpperCase() || "MEDIUM"
 
     if (!title) {
-        console.log("Title cannot be empty.")
+        log_error("Title cannot be empty.")
         return
     }
     if (!description) {
-        console.log("Description cannot be empty.")
+        log_error("Description cannot be empty.")
         return
     }
     if (!STATUSES.includes(status)) {
-        console.log(`Invalid status. Choose between ${STATUSES.join(", ")}`)
+        log_error(`Invalid status. Choose between ${STATUSES.join(", ")}`)
         return
     }
     if (!PRIORITIES.includes(priority)) {
-        console.log(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
+        log_error(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
         return
     }
 
@@ -92,15 +93,15 @@ function format_issue(issue) {
     return `ID:          ${issue.id}
 Title:       ${issue.title}
 Description: ${issue.description}
-Status:      ${issue.status}
-Priority:    ${issue.priority}
-Labels:      ${issue.labels.length ? issue.labels.join(", ") : "(none)"}
+Status:      ${color_status(issue.status)}
+Priority:    ${color_priority(issue.priority)}
+Labels:      ${issue.labels.length ? issue.labels.map(color_label).join(", ") : "(none)"}
 Created:     ${new Date(issue.created_timestamp).toLocaleString()}
 Updated:     ${new Date(issue.updated_timestamp).toLocaleString()}`
 }
 
 function format_row(issue, show_created = false) {
-    const row = `#${issue.id} | ${issue.title} | Status: ${issue.status} | Priority: ${issue.priority} | Labels: ${issue.labels.join(", ")}`
+    const row = `#${issue.id} | ${issue.title} | Status: ${color_status(issue.status)} | Priority: ${color_priority(issue.priority)} | Labels: ${issue.labels.map(color_label).join(", ")}`
     return show_created ? `${row} | Created: ${new Date(issue.created_timestamp).toLocaleDateString()}` : row
 }
 
@@ -117,7 +118,7 @@ function list_issues() {
 function show_issue(id) {
     const issue = get_issue(id)
     if (!issue) {
-        console.log("Issue not found.")
+        log_error("Issue not found.")
         return
     }
     console.log(format_issue(issue))
@@ -126,13 +127,13 @@ function show_issue(id) {
 function edit_title(id, title) {
     title = String(title ?? "").trim()
     if (!title) {
-        console.log("Title cannot be empty.")
+        log_error("Title cannot be empty.")
         return
     }
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     issue.title = title
@@ -144,13 +145,13 @@ function edit_title(id, title) {
 function edit_description(id, description) {
     description = String(description ?? "").trim()
     if (!description) {
-        console.log("Description cannot be empty.")
+        log_error("Description cannot be empty.")
         return
     }
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     issue.description = description
@@ -161,13 +162,13 @@ function edit_description(id, description) {
 
 function update_status(id, new_status) {
     if (!STATUSES.includes(new_status)) {
-        console.log(`New status name is incorrect. Choose between "IN_PROGRESS", "TODO", "CLOSED"`)
+        log_error(`New status name is incorrect. Choose between "IN_PROGRESS", "TODO", "CLOSED"`)
         return
     }
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     issue.status = new_status
@@ -179,13 +180,13 @@ function update_status(id, new_status) {
 function update_priority(id, new_priority) {
     const priority = String(new_priority ?? "").toUpperCase()
     if (!PRIORITIES.includes(priority)) {
-        console.log(`Invalid priority. Choose between "LOW", "MEDIUM", "HIGH"`)
+        log_error(`Invalid priority. Choose between "LOW", "MEDIUM", "HIGH"`)
         return
     }
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     issue.priority = priority
@@ -198,7 +199,7 @@ function add_labels(id, labels) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     let changed = false
@@ -222,7 +223,7 @@ function remove_labels(id, labels) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     let changed = false
@@ -258,7 +259,7 @@ function list_labels() {
     const width = Math.max(...names.map(name => name.length))
     for (const name of names) {
         const count = counts.get(name)
-        console.log(`${name.padEnd(width)}  ${count} ${count === 1 ? "issue" : "issues"}`)
+        console.log(`${color_label(name.padEnd(width))}  ${count} ${count === 1 ? "issue" : "issues"}`)
     }
     console.log()
     console.log(`${counts.size} ${counts.size === 1 ? "label" : "labels"} in use.`)
@@ -272,7 +273,7 @@ function delete_issue(id) {
     const issues = read_issues()
     const index = issues.findIndex(element => element.id === id)
     if (index === -1) {
-        console.log("Issue DNE")
+        log_error("Issue DNE")
         return
     }
     const [issue] = issues.splice(index, 1)
@@ -294,11 +295,11 @@ const SORT_KEYS = {
 function sort_issues(by = "id", order = "asc", issues = read_issues()) {
     const key = SORT_KEYS[by]
     if (!key) {
-        console.log(`Invalid sort field. Choose between ${Object.keys(SORT_KEYS).join(", ")}`)
+        log_error(`Invalid sort field. Choose between ${Object.keys(SORT_KEYS).join(", ")}`)
         return null
     }
     if (order !== "asc" && order !== "desc") {
-        console.log("Invalid sort order. Choose between asc, desc")
+        log_error("Invalid sort order. Choose between asc, desc")
         return null
     }
     const direction = order === "asc" ? 1 : -1
@@ -312,11 +313,11 @@ function filter_issues(status, priority, title, description, labels = []) {
     description = String(description ?? "").trim().toLowerCase()
     labels = normalize_labels(labels)
     if (status && !STATUSES.includes(status)) {
-        console.log(`Invalid status. Choose between ${STATUSES.join(", ")}`)
+        log_error(`Invalid status. Choose between ${STATUSES.join(", ")}`)
         return null
     }
     if (priority && !PRIORITIES.includes(priority)) {
-        console.log(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
+        log_error(`Invalid priority. Choose between ${PRIORITIES.join(", ")}`)
         return null
     }
     return read_issues().filter(element =>

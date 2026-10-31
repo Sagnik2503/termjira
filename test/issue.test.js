@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { create_issue, format_row, sort_issues } from "../src/issue.js";
 
+const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
+
 describe("create_issue", () => {
     it("defaults status and priority and normalizes labels", async () => {
         const issue = await create_issue("Fix login", "Login is broken", undefined, undefined, "Bug, bug, UI");
@@ -56,10 +58,10 @@ describe("format_row", () => {
     const issue = { id: 7, title: "Fix login", status: "TODO", priority: "HIGH", labels: ["bug"], created_timestamp: 0 };
 
     it("renders a compact row without the created date by default", () => {
-        expect(format_row(issue)).toBe("#7 | Fix login | Status: TODO | Priority: HIGH | Labels: bug");
+        expect(stripAnsi(format_row(issue))).toBe("#7 | Fix login | Status: TODO | Priority: HIGH | Labels: bug");
     });
 
     it("appends a local date when asked", () => {
-        expect(format_row(issue, true)).toBe(`#7 | Fix login | Status: TODO | Priority: HIGH | Labels: bug | Created: ${new Date(0).toLocaleDateString()}`);
+        expect(stripAnsi(format_row(issue, true))).toBe(`#7 | Fix login | Status: TODO | Priority: HIGH | Labels: bug | Created: ${new Date(0).toLocaleDateString()}`);
     });
 });
