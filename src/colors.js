@@ -30,8 +30,20 @@ function color_logo(text) {
     return pc.bold(pc.cyan(text))
 }
 
+function color_command(text) {
+    return pc.bold(pc.cyan(text))
+}
+
+function color_help_header(text) {
+    return pc.bold(text)
+}
+
+function color_muted(text) {
+    return pc.dim(text)
+}
+
 function log_error(message) {
     console.log(pc.red(message))
 }
 
-module.exports = { color_priority, color_status, color_label, color_logo, log_error }
+module.exports = { color_priority, color_status, color_label, color_logo, color_command, color_help_header, color_muted, log_error }
