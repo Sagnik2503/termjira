@@ -11,6 +11,7 @@ class Issue {
         this.status = status
         this.priority = priority
         this.labels = labels
+        this.comments=[]
     }
     created_timestamp=Date.now()
     updated_timestamp=this.created_timestamp
@@ -33,6 +34,14 @@ function normalize_labels(labels) {
     return result
 }
 
+function normalize_comments(comments = []) {
+    return comments.map((comment, index) =>
+        typeof comment === "string"
+            ? { id: index + 1, text: comment }
+            : { id: comment.id ?? index + 1, text: String(comment.text ?? "") }
+    )
+}
+
 function read_issues() {
     try {
         const data = JSON.parse(readFileSync(STORE_PATH, "utf8"))
@@ -40,6 +49,7 @@ function read_issues() {
             log_error("Issue store is not a list, starting empty.")
             return []
         }
+        for (const issue of data) issue.comments = normalize_comments(issue.comments)
         return data
     } catch (error) {
         if (error.code !== "ENOENT") log_error(`Could not load issues: ${error.message}`)
@@ -96,6 +106,7 @@ Description: ${issue.description}
 Status:      ${color_status(issue.status)}
 Priority:    ${color_priority(issue.priority)}
 Labels:      ${issue.labels.length ? issue.labels.map(color_label).join(", ") : "(none)"}
+Comments:    ${(issue.comments ?? []).length ? issue.comments.map((comment, index) => `${index ? "\n             " : ""}#${comment.id}: ${comment.text}`).join("") : "(none)"}
 Created:     ${new Date(issue.created_timestamp).toLocaleString()}
 Updated:     ${new Date(issue.updated_timestamp).toLocaleString()}`
 }
@@ -329,4 +340,40 @@ function filter_issues(status, priority, title, description, labels = []) {
     )
 }
 
-module.exports = { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, STATUSES, PRIORITIES }
+function add_comments(id, comment){
+    const text = String(comment ?? "").trim()
+    if(text === ""){
+        log_error("Provide a comment")
+        return
+    }
+    const issues=read_issues()
+    const target_issue=issues.find((issue)=>issue.id===id)
+    if(!target_issue){
+        log_error("The issue does not exist")
+        return
+    }
+    target_issue.comments.push({ id: target_issue.comments.reduce((max, c) => Math.max(max, c.id), 0) + 1, text })
+    target_issue.updated_timestamp = Date.now()
+    write_issues(issues)
+    return target_issue
+}
+
+function delete_comment(issueId, commentId){
+    const issues=read_issues()
+    const target_issue=issues.find((issue)=>issue.id===issueId)
+    if(!target_issue){
+        log_error("The issue does not exist")
+        return
+    }
+    const index=target_issue.comments.findIndex((comment)=>comment.id===commentId)
+    if(index === -1){
+        log_error(`Comment #${commentId} not found on issue #${issueId}`)
+        return
+    }
+    const [removed]=target_issue.comments.splice(index, 1)
+    target_issue.updated_timestamp = Date.now()
+    write_issues(issues)
+    return removed
+}
+
+module.exports = { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, STATUSES, PRIORITIES }

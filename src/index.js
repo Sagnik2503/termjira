@@ -1,9 +1,10 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, STATUSES, PRIORITIES} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 const { log_error, color_command, color_help_header, color_muted } = require('./colors')
 const { showWelcome } = require('./banner')
+const { log } = require('console')
 
 // seed issues for development on an empty store only
 if (count_issues() === 0) {
@@ -48,6 +49,10 @@ const HELP_SECTIONS = [
         ["label list", "List all labels in use"],
         ["label add <id> <label>[,<label>...]", "Add labels to an issue"],
         ["label remove <id> <label>[,<label>...]", "Remove labels from an issue"],
+    ]],
+    ["Comments", [
+        ["comment add <id> \"<text>\"", "Add a comment to an issue"],
+        ["comment delete <id> <commentId>", "Delete a comment from an issue"],
     ]],
     ["Search", [
         ['filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]', "Filter issues"],
@@ -221,10 +226,38 @@ const commands = {
         } else {
             result.forEach(issue => console.log(format_row(issue)))
         }
+    },
+    comment: (args)=>{
+        const action = String(args[0] ?? "").toLowerCase()
+        if (action === "add") {
+            const id = Number(args[1])
+            const raw = args.slice(2).join(" ")
+            const quoted = raw.match(/^"([^"]*)"$/) || raw.match(/^'([^']*)'$/)
+            if (!Number.isInteger(id) || !quoted || !quoted[1].trim()) {
+                log_error('Usage: comment add <id> "<text>"')
+                return
+            }
+            const issue = add_comments(id, quoted[1])
+            if (issue) console.log(`Added comment #${issue.comments.at(-1).id} to issue #${issue.id}.`)
+            return
+        }
+        if (action === "delete") {
+            const id = Number(args[1])
+            const commentId = Number(args[2])
+            if (!Number.isInteger(id) || !Number.isInteger(commentId)) {
+                log_error("Usage: comment delete <id> <commentId>")
+                return
+            }
+            const removed = delete_comment(id, commentId)
+            if (removed) console.log(`Deleted comment #${removed.id} from issue #${id}: ${removed.text}`)
+            return
+        }
+        log_error('Usage: comment add <id> "<text>" | comment delete <id> <commentId>')
     }
 }
 
 showWelcome()
+console.log(color_muted('Type "help" for available commands.'))
 function askCommand() {
     console.log()
     rl.question("tj> ", async (answer) => {

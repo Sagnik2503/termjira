@@ -46,6 +46,8 @@ A command-line issue tracking tool inspired by Jira, built with JavaScript and N
 | `label list` | List all labels in use with issue counts |
 | `label add <id> <label>[,<label>...]` | Add labels to an issue |
 | `label remove <id> <label>[,<label>...]` | Remove labels from an issue |
+| `comment add <id> "<text>"` | Add a comment to an issue (text must be quoted) |
+| `comment delete <id> <commentId>` | Delete a comment from an issue |
 | `filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]` | Filter issues; repeat `--label` to require every label |
 | `sort [--by id\|priority\|status\|created] [--order asc\|desc]` | Sort issues; defaults to `id` ascending |
 | `exit` | Exit TermJira |
