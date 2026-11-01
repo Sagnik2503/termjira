@@ -1,49 +1,43 @@
-const picocolors = require('picocolors')
-
-const pc = picocolors.createColors(process.stdout.isTTY && !process.env.NO_COLOR && process.env.FORCE_COLOR !== '0')
-
-const PRIORITY_COLORS = {
-    HIGH: value => pc.bold(pc.red(value)),
-    MEDIUM: pc.yellow,
-    LOW: pc.green,
-}
-
-const STATUS_COLORS = {
-    TODO: pc.dim,
-    IN_PROGRESS: pc.cyan,
-    CLOSED: pc.green,
-}
+const { theme } = require('./theme')
 
 function color_priority(priority) {
-    return (PRIORITY_COLORS[priority] ?? String)(priority)
+    return theme.priority(priority)
 }
 
 function color_status(status) {
-    return (STATUS_COLORS[status] ?? String)(status)
+    return theme.status(status)
 }
 
 function color_label(label) {
-    return pc.cyan(label)
+    return theme.muted(label)
 }
 
 function color_logo(text) {
-    return pc.bold(pc.cyan(text))
+    return theme.bold(theme.accent(text))
 }
 
 function color_command(text) {
-    return pc.bold(pc.cyan(text))
+    return theme.bold(theme.accent(text))
 }
 
 function color_help_header(text) {
-    return pc.bold(text)
+    return theme.bold(text)
 }
 
 function color_muted(text) {
-    return pc.dim(text)
+    return theme.muted(text)
 }
 
 function log_error(message) {
-    console.log(pc.red(message))
+    console.log(theme.danger(`✗ ${message}`))
 }
 
-module.exports = { color_priority, color_status, color_label, color_logo, color_command, color_help_header, color_muted, log_error }
+function log_warn(message) {
+    console.log(theme.warning(`! ${message}`))
+}
+
+function log_success(message) {
+    console.log(theme.success(`✓ ${message}`))
+}
+
+module.exports = { color_priority, color_status, color_label, color_logo, color_command, color_help_header, color_muted, log_error, log_warn, log_success }

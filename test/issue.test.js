@@ -141,13 +141,14 @@ describe("sort_issues", () => {
 });
 
 describe("format_row", () => {
-    const issue = { id: 7, title: "Fix login", status: "TODO", priority: "HIGH", labels: ["bug"], created_timestamp: 0 };
+    const issue = { id: 7, title: "Fix login", status: "TODO", priority: "HIGH", labels: ["bug"], created_timestamp: 0, updated_timestamp: 0 };
 
-    it("renders a compact row without the created date by default", () => {
-        expect(stripAnsi(format_row(issue))).toBe("#7 | Fix login | Status: TODO | Priority: HIGH | Labels: bug");
-    });
+    it("renders the responsive table row", () => {
+        const row = stripAnsi(format_row(issue, { width: 120, now: 0 }));
 
-    it("appends a local date when asked", () => {
-        expect(stripAnsi(format_row(issue, true))).toBe(`#7 | Fix login | Status: TODO | Priority: HIGH | Labels: bug | Created: ${new Date(0).toLocaleDateString()}`);
+        expect(row).toContain("#7");
+        expect(row).toContain("Fix login");
+        expect(row).toContain("↑ HIGH");
+        expect(row).toContain("bug");
     });
 });

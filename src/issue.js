@@ -1,5 +1,6 @@
 const { readFileSync, writeFileSync } = require('node:fs')
-const { color_priority, color_status, color_label, log_error } = require('./colors')
+const { color_priority, color_status, color_label, log_error, log_warn } = require('./colors')
+const { format_list } = require('./format')
 
 const STORE_PATH = "issue_store.json"
 
@@ -119,11 +120,10 @@ function format_row(issue, show_created = false) {
 function list_issues() {
     const issues = read_issues()
     if (issues.length === 0) {
-        console.log("No issues found")
+        log_warn('No issues yet — create one with "create".')
         return
     }
-
-    console.log(issues.map(format_issue).join("\n\n"))
+    console.log(format_list(issues, { context: `Issues · ${issues.length}` }))
 }
 
 function show_issue(id) {
