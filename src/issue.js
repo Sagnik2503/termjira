@@ -1,5 +1,5 @@
 const { readFileSync, writeFileSync } = require('node:fs')
-const { color_label, log_error, log_warn } = require('./colors')
+const { color_label, log_error, log_warn, log_success } = require('./colors')
 const { format_issue, format_row, format_list } = require('./format')
 
 const STORE_PATH = "issue_store.json"
@@ -21,6 +21,10 @@ class Issue {
 
 const STATUSES = ["TODO", "IN_PROGRESS", "CLOSED"]
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"]
+
+function issue_not_found(id) {
+    log_error(`Issue #${id} not found. Try "list" to see valid IDs.`)
+}
 
 function normalize_labels(labels) {
     const list = Array.isArray(labels) ? labels : String(labels ?? "").split(",")
@@ -112,7 +116,7 @@ function list_issues() {
 function show_issue(id) {
     const issue = get_issue(id)
     if (!issue) {
-        log_error("Issue not found.")
+        issue_not_found(id)
         return
     }
     console.log(format_issue(issue))
@@ -127,7 +131,7 @@ function edit_title(id, title) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     issue.title = title
@@ -145,7 +149,7 @@ function edit_description(id, description) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     issue.description = description
@@ -162,7 +166,7 @@ function update_status(id, new_status) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     issue.status = new_status
@@ -180,7 +184,7 @@ function update_priority(id, new_priority) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     issue.priority = priority
@@ -193,17 +197,17 @@ function add_labels(id, labels) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     let changed = false
     for (const label of normalize_labels(labels)) {
         if (issue.labels.includes(label)) {
-            console.log(`Issue #${issue.id} already has label "${label}".`)
+            log_warn(`Issue #${issue.id} already has label "${label}".`)
             continue
         }
         issue.labels.push(label)
-        console.log(`Added "${label}" to issue #${issue.id}.`)
+        log_success(`Added "${label}" to issue #${issue.id}.`)
         changed = true
     }
     if (changed) {
@@ -217,18 +221,18 @@ function remove_labels(id, labels) {
     const issues = read_issues()
     const issue = issues.find(element => element.id === id)
     if (!issue) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     let changed = false
     for (const label of normalize_labels(labels)) {
         const index = issue.labels.indexOf(label)
         if (index === -1) {
-            console.log(`Issue #${issue.id} does not have label "${label}".`)
+            log_warn(`Issue #${issue.id} does not have label "${label}".`)
             continue
         }
         issue.labels.splice(index, 1)
-        console.log(`Removed "${label}" from issue #${issue.id}.`)
+        log_success(`Removed "${label}" from issue #${issue.id}.`)
         changed = true
     }
     if (changed) {
@@ -246,7 +250,7 @@ function list_labels() {
         }
     }
     if (counts.size === 0) {
-        console.log("No labels in use.")
+        log_warn('No labels in use yet. Add one with "label add <id> <label>".')
         return
     }
     const names = [...counts.keys()].sort()
@@ -267,7 +271,7 @@ function delete_issue(id) {
     const issues = read_issues()
     const index = issues.findIndex(element => element.id === id)
     if (index === -1) {
-        log_error("Issue DNE")
+        issue_not_found(id)
         return
     }
     const [issue] = issues.splice(index, 1)
@@ -332,7 +336,7 @@ function add_comments(id, comment){
     const issues=read_issues()
     const target_issue=issues.find((issue)=>issue.id===id)
     if(!target_issue){
-        log_error("The issue does not exist")
+        issue_not_found(id)
         return
     }
     target_issue.comments.push({ id: target_issue.comments.reduce((max, c) => Math.max(max, c.id), 0) + 1, text })
@@ -345,7 +349,7 @@ function delete_comment(issueId, commentId){
     const issues=read_issues()
     const target_issue=issues.find((issue)=>issue.id===issueId)
     if(!target_issue){
-        log_error("The issue does not exist")
+        issue_not_found(issueId)
         return
     }
     const index=target_issue.comments.findIndex((comment)=>comment.id===commentId)
@@ -359,4 +363,4 @@ function delete_comment(issueId, commentId){
     return removed
 }
 
-module.exports = { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, STATUSES, PRIORITIES }
+module.exports = { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, issue_not_found, STATUSES, PRIORITIES }
