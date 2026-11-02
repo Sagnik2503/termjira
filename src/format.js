@@ -37,20 +37,26 @@ function format_absolute_time(timestamp) {
 }
 
 function wrap(text, width) {
-    const words = String(text ?? '').split(/\s+/).filter(Boolean)
-    if (words.length === 0) return ['']
+    const cols = Math.max(1, Math.floor(width))
     const lines = []
     let line = ''
-    for (const word of words) {
-        // shortcut: a word longer than width is not split; fine for titles and descriptions
-        if (!line) line = word
-        else if (line.length + 1 + word.length <= width) line += ` ${word}`
-        else {
-            lines.push(line)
-            line = word
+    for (const word of String(text ?? '').split(/\s+/).filter(Boolean)) {
+        let rest = word
+        if (line && line.length + 1 + rest.length <= cols) {
+            line += ` ${rest}`
+            continue
         }
+        if (line) {
+            lines.push(line)
+            line = ''
+        }
+        while (rest.length > cols) {
+            lines.push(rest.slice(0, cols))
+            rest = rest.slice(cols)
+        }
+        line = rest
     }
-    lines.push(line)
+    if (line || lines.length === 0) lines.push(line)
     return lines
 }
 
@@ -107,4 +113,46 @@ function format_list(issues, { width, now = Date.now(), context } = {}) {
     ].join('\n')
 }
 
-module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list }
+function format_comments(comments, { width } = {}) {
+    if (!comments?.length) return ''
+    const cols = resolve_width(width)
+    const lines = [theme.bold(`Comments (${comments.length})`), theme.rule(cols)]
+    for (const comment of comments) {
+        const prefix = `#${comment.id} `
+        const wrapped = wrap(comment.text, Math.max(10, cols - prefix.length))
+        lines.push(`${theme.muted(`#${comment.id}`)} ${wrapped[0]}`)
+        for (const extra of wrapped.slice(1)) lines.push(`${' '.repeat(prefix.length)}${extra}`)
+        lines.push('')
+    }
+    return lines.join('\n').trimEnd()
+}
+
+function format_issue(issue, { width, now = Date.now() } = {}) {
+    const cols = resolve_width(width)
+    const inner = cols - 4
+    const content = text => `${theme.muted('│')} ${pad(text, inner)} ${theme.muted('│')}`
+    const field = (label, value) => content(`${theme.muted(label.padEnd(10))}${value}`)
+    const heading = `#${issue.id}`
+    const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - heading.length - 5))}╮`)}`
+    const bottom = theme.muted(`╰${'─'.repeat(Math.max(0, cols - 2))}╯`)
+    const plainLabels = issue.labels?.length ? issue.labels.join(', ') : '—'
+    const labels = theme.muted(truncate(plainLabels, inner - 10))
+    const updated = issue.updated_timestamp ?? issue.created_timestamp
+
+    const lines = [top]
+    for (const line of wrap(issue.title, inner)) lines.push(content(theme.bold(line)))
+    lines.push(content(''))
+    for (const line of wrap(issue.description || '—', inner)) lines.push(content(line))
+    lines.push(content(''))
+    lines.push(field('Status', theme.status(issue.status)))
+    lines.push(field('Priority', theme.priority(issue.priority)))
+    lines.push(field('Labels', labels))
+    lines.push(field('Created', `${theme.muted(format_relative_time(issue.created_timestamp, now))} ${theme.muted('·')} ${theme.muted(format_absolute_time(issue.created_timestamp))}`))
+    lines.push(field('Updated', `${theme.muted(format_relative_time(updated, now))} ${theme.muted('·')} ${theme.muted(format_absolute_time(updated))}`))
+    lines.push(bottom)
+
+    const comments = format_comments(issue.comments ?? [], { width: cols })
+    return comments ? `${lines.join('\n')}\n\n${comments}` : lines.join('\n')
+}
+
+module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list, format_issue, format_comments }
