@@ -1,8 +1,10 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, STATUSES, PRIORITIES} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
-const { log_error, color_command, color_help_header, color_muted } = require('./colors')
+const { format_list } = require('./format')
+const { filter_context, sort_context } = require('./query')
+const { log_error, log_warn, color_command, color_help_header, color_muted } = require('./colors')
 const { showWelcome } = require('./banner')
 const { log } = require('console')
 
@@ -186,10 +188,12 @@ const commands = {
         const result=sort_issues(options.by, options.order)
         if (result === null) return
         if (result.length === 0) {
-            console.log("No issues found")
+            log_warn('No issues yet — create one with "create".')
             return
         }
-        result.forEach(issue => console.log(format_row(issue, true)))
+        const by = options.by ?? 'id'
+        const order = options.order ?? 'asc'
+        console.log(format_list(result, { context: sort_context(result.length, by, order) }))
     },
     filter: (args)=>{
         const flags={}
@@ -222,10 +226,10 @@ const commands = {
         const result=filter_issues(flags.status, flags.priority, flags.title, flags.description, flags.label)
         if (result === null) return
         if (result.length === 0) {
-            console.log("No matching issues found.")
-        } else {
-            result.forEach(issue => console.log(format_row(issue)))
+            log_warn('No matching issues. Try removing a filter.')
+            return
         }
+        console.log(format_list(result, { context: filter_context(result.length, flags) }))
     },
     comment: (args)=>{
         const action = String(args[0] ?? "").toLowerCase()
