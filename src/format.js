@@ -148,12 +148,12 @@ function format_issue(issue, { width, now = Date.now() } = {}) {
     const cols = resolve_width(width)
     const inner = cols - 4
     const content = text => `${theme.muted('│')} ${pad(truncate(text, inner), inner)} ${theme.muted('│')}`
-    const field = (label, value) => content(`${theme.muted(label.padEnd(10))}${value}`)
+    const field = (label, value) => content(`${theme.muted(label.padEnd(CARD_LABEL_WIDTH))}${value}`)
     const heading = `#${issue.id}`
     const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - heading.length - 5))}╮`)}`
     const bottom = theme.muted(`╰${'─'.repeat(Math.max(0, cols - 2))}╯`)
     const plainLabels = issue.labels?.length ? issue.labels.join(', ') : '—'
-    const labels = theme.muted(truncate(plainLabels, inner - 10))
+    const labels = theme.muted(truncate(plainLabels, inner - CARD_LABEL_WIDTH))
     const updated = issue.updated_timestamp ?? issue.created_timestamp
 
     const lines = [top]
@@ -172,6 +172,7 @@ function format_issue(issue, { width, now = Date.now() } = {}) {
     return comments ? `${lines.join('\n')}\n\n${comments}` : lines.join('\n')
 }
 
+const CARD_LABEL_WIDTH = 10
 const HELP_USAGE_MAX = 40
 
 function format_help(sections, { width } = {}) {

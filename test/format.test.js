@@ -261,6 +261,24 @@ describe("format_help", () => {
 
         for (const line of lines) expect(line.length).toBeLessThanOrEqual(width);
     });
+
+    it.each([60, 80, 100])("keeps the Search filter row to two lines with a complete example at %i columns", width => {
+        const usage = 'filter [--status <status>] [--priority <priority>]';
+        const lines = stripAnsi(format_help(HELP_SECTIONS, { width })).split("\n");
+        const start = lines.indexOf("Search");
+        const tryIndex = lines.findIndex((line, i) => i > start && line.includes("Try:"));
+        const filterIndex = lines.findIndex((line, i) => i > start && i < tryIndex && line.includes("filter ["));
+
+        expect(filterIndex).toBeGreaterThan(start);
+        expect(lines[filterIndex].trim()).toBe(usage);
+        expect(lines[filterIndex + 1].trim()).toBe("Filter issues");
+        expect(lines[filterIndex + 2].trim().startsWith("sort ")).toBe(true);
+
+        const tryLine = lines[tryIndex];
+        expect(tryLine).toContain(`Try: ${usage}`);
+        expect(tryLine).not.toContain("…");
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(width);
+    });
 });
 
 const width_issue = {
