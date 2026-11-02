@@ -6,6 +6,7 @@ import {
     resolve_width,
     format_row,
     format_list,
+    format_help,
 } from "../src/format.js";
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
@@ -88,5 +89,48 @@ describe("format_list", () => {
         expect(out).toContain("─");
         expect(out).toContain("PRIORITY");
         expect(out).toContain("STATUS");
+    });
+});
+
+import { HELP_SECTIONS } from "../src/help.js";
+
+describe("format_help", () => {
+    const titles = ["General", "Issues", "Labels", "Comments", "Search"];
+
+    it("keeps the five familiar groups", () => {
+        expect(HELP_SECTIONS.map(([title]) => title)).toEqual(titles);
+    });
+
+    it("renders every section with a rule and exactly one example", () => {
+        const out = stripAnsi(format_help(HELP_SECTIONS, { width: 100 }));
+        const lines = out.split("\n");
+
+        for (const title of titles) {
+            const start = lines.findIndex(line => line === title);
+            expect(start).toBeGreaterThanOrEqual(0);
+            expect(lines[start + 1]).toMatch(/^─+$/);
+        }
+        expect(lines.filter(line => line.includes("Try:")).length).toBe(titles.length);
+    });
+
+    it("aligns command and description columns", () => {
+        const lines = stripAnsi(format_help(HELP_SECTIONS, { width: 100 })).split("\n");
+        const help = lines.find(line => line.includes("Show available commands"));
+        const exit = lines.find(line => line.includes("Exit TermJira"));
+
+        expect(help.indexOf("Show")).toBe(exit.indexOf("Exit"));
+    });
+
+    it("falls back to two lines for long usages", () => {
+        const out = stripAnsi(format_help(HELP_SECTIONS, { width: 100 }));
+
+        expect(out).toContain("update <id> <title|description|status|priority> <value>");
+        expect(out).toContain("Update an issue field");
+    });
+
+    it.each([60, 80, 100])("keeps every line within %i columns", width => {
+        const lines = stripAnsi(format_help(HELP_SECTIONS, { width })).split("\n");
+
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(width);
     });
 });
