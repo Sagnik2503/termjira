@@ -87,15 +87,15 @@ describe("comments", () => {
 describe("format_issue comments", () => {
     const base = { id: 7, title: "Fix login", description: "Bug", status: "TODO", priority: "HIGH", labels: [], created_timestamp: 0, updated_timestamp: 0 };
 
-    it("renders comments with their ids", () => {
-        const output = stripAnsi(format_issue({ ...base, comments: [{ id: 1, text: "first" }, { id: 2, text: "second" }] }));
+    it("renders comments below the card with their ids", () => {
+        const output = stripAnsi(format_issue({ ...base, comments: [{ id: 1, text: "first" }, { id: 2, text: "second" }] }, { width: 80, now: 0 }));
 
-        expect(output).toContain("#1: first");
-        expect(output).toContain("#2: second");
+        expect(output).toContain("#1 first");
+        expect(output).toContain("#2 second");
     });
 
-    it("shows (none) when there are no comments", () => {
-        expect(stripAnsi(format_issue({ ...base, comments: [] }))).toContain("Comments:    (none)");
+    it("omits the comments section when there are no comments", () => {
+        expect(stripAnsi(format_issue({ ...base, comments: [] }, { width: 80, now: 0 }))).not.toContain("Comments");
     });
 });
 

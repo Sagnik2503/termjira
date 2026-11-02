@@ -1,6 +1,6 @@
 const { readFileSync, writeFileSync } = require('node:fs')
-const { color_priority, color_status, color_label, log_error, log_warn } = require('./colors')
-const { format_list } = require('./format')
+const { color_label, log_error, log_warn } = require('./colors')
+const { format_issue, format_row, format_list } = require('./format')
 
 const STORE_PATH = "issue_store.json"
 
@@ -98,23 +98,6 @@ function create_issue(title, description, status = "TODO", priority = "MEDIUM", 
     issues.push(issue)
     write_issues(issues)
     return issue
-}
-
-function format_issue(issue) {
-    return `ID:          ${issue.id}
-Title:       ${issue.title}
-Description: ${issue.description}
-Status:      ${color_status(issue.status)}
-Priority:    ${color_priority(issue.priority)}
-Labels:      ${issue.labels.length ? issue.labels.map(color_label).join(", ") : "(none)"}
-Comments:    ${(issue.comments ?? []).length ? issue.comments.map((comment, index) => `${index ? "\n             " : ""}#${comment.id}: ${comment.text}`).join("") : "(none)"}
-Created:     ${new Date(issue.created_timestamp).toLocaleString()}
-Updated:     ${new Date(issue.updated_timestamp).toLocaleString()}`
-}
-
-function format_row(issue, show_created = false) {
-    const row = `#${issue.id} | ${issue.title} | Status: ${color_status(issue.status)} | Priority: ${color_priority(issue.priority)} | Labels: ${issue.labels.map(color_label).join(", ")}`
-    return show_created ? `${row} | Created: ${new Date(issue.created_timestamp).toLocaleDateString()}` : row
 }
 
 function list_issues() {

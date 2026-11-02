@@ -6,6 +6,8 @@ import {
     resolve_width,
     format_row,
     format_list,
+    format_issue,
+    format_comments,
 } from "../src/format.js";
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
@@ -34,6 +36,13 @@ describe("truncate", () => {
 describe("wrap", () => {
     it("breaks on word boundaries", () => {
         expect(wrap("one two three", 7)).toEqual(["one two", "three"]);
+    });
+
+    it("hard-splits words longer than the width", () => {
+        const lines = wrap("A".repeat(25), 10);
+
+        expect(lines).toEqual(["A".repeat(10), "A".repeat(10), "A".repeat(5)]);
+        expect(lines.every(line => line.length <= 10)).toBe(true);
     });
 });
 
@@ -88,5 +97,71 @@ describe("format_list", () => {
         expect(out).toContain("─");
         expect(out).toContain("PRIORITY");
         expect(out).toContain("STATUS");
+    });
+});
+
+describe("format_issue", () => {
+    const detail = {
+        id: 7,
+        title: "Fix login",
+        description: "Bug on expired sessions",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        labels: ["bug"],
+        comments: [{ id: 1, text: "first" }],
+        created_timestamp: 0,
+        updated_timestamp: 0,
+    };
+
+    const borderWidths = out => stripAnsi(out)
+        .split("\n")
+        .filter(line => /^[│╭╰]/.test(line))
+        .map(line => line.length);
+
+    it("renders a card with fields and comments below it", () => {
+        const out = stripAnsi(format_issue(detail, { width: 80, now: 0 }));
+
+        expect(out).toContain("#7");
+        expect(out).toContain("◐ IN_PROGRESS");
+        expect(out).toContain("↑ HIGH");
+        expect(out).toContain("bug");
+        expect(out).toContain("just now");
+        expect(out).toContain("Comments (1)");
+        expect(out).toContain("#1 first");
+        expect(out.indexOf("Comments")).toBeGreaterThan(out.indexOf("╰"));
+    });
+
+    it.each([60, 80, 100])("keeps every card line %i columns wide", width => {
+        expect(new Set(borderWidths(format_issue(detail, { width, now: 0 })))).toEqual(new Set([width]));
+    });
+
+    it("wraps or truncates long unbroken content without breaking the border", () => {
+        const long = {
+            ...detail,
+            title: "A".repeat(200),
+            description: "B".repeat(200),
+            labels: ["c".repeat(100)],
+        };
+        const out = stripAnsi(format_issue(long, { width: 60, now: 0 }));
+
+        expect(new Set(borderWidths(out))).toEqual(new Set([60]));
+        expect(out).toContain("…");
+    });
+
+    it("omits the comments section when there are none", () => {
+        expect(stripAnsi(format_issue({ ...detail, comments: [] }, { width: 80, now: 0 }))).not.toContain("Comments");
+    });
+});
+
+describe("format_comments", () => {
+    it("wraps long unbroken comment text to the terminal width", () => {
+        const out = stripAnsi(format_comments([{ id: 12, text: "D".repeat(200) }], { width: 60 }));
+
+        expect(out.split("\n").every(line => line.length <= 60)).toBe(true);
+        expect(out).toContain("#12");
+    });
+
+    it("returns an empty string with no comments", () => {
+        expect(format_comments([], { width: 60 })).toBe("");
     });
 });
