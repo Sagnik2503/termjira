@@ -4,7 +4,8 @@ const { create_issue, list_issues, show_issue, format_issue, edit_description, e
 const { markAsUncloneable } = require('worker_threads')
 const { format_list } = require('./format')
 const { filter_context, sort_context } = require('./query')
-const { log_error, log_warn, color_command, color_help_header, color_muted } = require('./colors')
+const { log_error, log_warn, color_muted } = require('./colors')
+const { show_help } = require('./help')
 const { showWelcome } = require('./banner')
 const { log } = require('console')
 
@@ -35,50 +36,6 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-const HELP_SECTIONS = [
-    ["General", [
-        ["help", "Show available commands"],
-        ["exit", "Exit TermJira"],
-    ]],
-    ["Issues", [
-        ["create", "Create a new issue"],
-        ["list", "List all issues"],
-        ["show <id>", "Show an issue"],
-        ["update <id> <title|description|status|priority> <value>", "Update an issue field"],
-        ["delete <id> [--force]", "Delete an issue (asks for confirmation unless --force)"],
-    ]],
-    ["Labels", [
-        ["label list", "List all labels in use"],
-        ["label add <id> <label>[,<label>...]", "Add labels to an issue"],
-        ["label remove <id> <label>[,<label>...]", "Remove labels from an issue"],
-    ]],
-    ["Comments", [
-        ["comment add <id> \"<text>\"", "Add a comment to an issue"],
-        ["comment delete <id> <commentId>", "Delete a comment from an issue"],
-    ]],
-    ["Search", [
-        ['filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]', "Filter issues"],
-        ["sort [--by id|priority|status|created] [--order asc|desc]", "Sort issues"],
-    ]],
-]
-
-function showHelp() {
-    const width = Math.max(...HELP_SECTIONS.flatMap(([, rows]) => rows.map(([usage]) => usage.length)).filter(length => length < 60))
-    console.log(color_help_header("Available commands:"))
-    HELP_SECTIONS.forEach(([title, rows]) => {
-        console.log()
-        console.log(color_help_header(title))
-        rows.forEach(([usage, description]) => {
-            if (usage.length > width) {
-                console.log(`  ${color_command(usage)}`)
-                console.log(`    ${color_muted(description)}`)
-            } else {
-                console.log(`  ${color_command(usage.padEnd(width))}  ${color_muted(description)}`)
-            }
-        })
-    })
-}
-
 function confirm(question) {
     return new Promise(resolve => rl.question(question, answer => resolve(answer)))
 }
@@ -93,7 +50,7 @@ function askField(name, values, fallback) {
 }
 
 const commands = {
-    help: showHelp,
+    help: show_help,
     list: list_issues,
     show: ([id]) => {
         if (!id) {

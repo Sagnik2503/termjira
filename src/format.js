@@ -155,4 +155,31 @@ function format_issue(issue, { width, now = Date.now() } = {}) {
     return comments ? `${lines.join('\n')}\n\n${comments}` : lines.join('\n')
 }
 
-module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list, format_issue, format_comments }
+const HELP_USAGE_MAX = 40
+
+function format_help(sections, { width } = {}) {
+    const cols = resolve_width(width)
+    const longest = Math.max(0, ...sections.flatMap(([, rows]) => rows.map(([usage]) => usage.length)))
+    const usageWidth = Math.max(1, Math.min(cols - 30, HELP_USAGE_MAX, longest))
+    const out = []
+    for (const [title, rows] of sections) {
+        out.push(theme.bold(title))
+        out.push(theme.rule(cols))
+        for (const [usage, description] of rows) {
+            if (usage.length > usageWidth) {
+                for (const line of wrap(usage, Math.max(10, cols - 2))) out.push(`  ${theme.accent(line)}`)
+                for (const line of wrap(description, Math.max(10, cols - 4))) out.push(`    ${theme.muted(line)}`)
+            } else {
+                const descColumn = usageWidth + 4
+                const wrapped = wrap(description, Math.max(1, cols - descColumn))
+                out.push(`  ${theme.accent(pad(usage, usageWidth))}  ${theme.muted(wrapped[0])}`)
+                for (const line of wrapped.slice(1)) out.push(`${' '.repeat(descColumn)}${theme.muted(line)}`)
+            }
+        }
+        out.push(`  ${theme.muted('Try:')} ${theme.accent(truncate(rows[0][0], Math.max(1, cols - 8)))}`)
+        out.push('')
+    }
+    return out.join('\n').trimEnd()
+}
+
+module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list, format_issue, format_comments, format_help }
