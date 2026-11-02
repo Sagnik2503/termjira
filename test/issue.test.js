@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue } from "../src/issue.js";
+import { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, update_status, update_priority, issue_not_found } from "../src/issue.js";
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
+
+const MESSAGE_GLYPHS = { success: "✓", warning: "!", error: "✗" };
+const MISSING_ID = 987654321;
+const missing_copy = `✗ Issue #${MISSING_ID} not found. Try "list" to see valid IDs.`;
+
+function printed_lines(log) {
+    return log.mock.calls.map(([line]) => stripAnsi(line));
+}
 
 describe("create_issue", () => {
     it("defaults status and priority and normalizes labels", async () => {
@@ -150,5 +158,96 @@ describe("format_row", () => {
         expect(row).toContain("Fix login");
         expect(row).toContain("↑ HIGH");
         expect(row).toContain("bug");
+    });
+});
+
+describe("issue_not_found", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("prints the friendly not-found copy with the error glyph", () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        issue_not_found(MISSING_ID);
+
+        expect(printed_lines(log)[0]).toBe(missing_copy);
+    });
+});
+
+describe("friendly feedback for unknown issues", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("show_issue reports the missing issue", () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        show_issue(MISSING_ID);
+
+        expect(printed_lines(log)[0]).toBe(missing_copy);
+    });
+
+    it("delete_issue reports the missing issue", () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(delete_issue(MISSING_ID)).toBeUndefined();
+        expect(printed_lines(log)[0]).toBe(missing_copy);
+    });
+
+    it("comment add and delete report the missing issue", () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(add_comments(MISSING_ID, "hello")).toBeUndefined();
+        expect(delete_comment(MISSING_ID, 1)).toBeUndefined();
+
+        expect(printed_lines(log)).toEqual([missing_copy, missing_copy]);
+    });
+
+    it("edit, status and priority report the missing issue", () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(edit_title(MISSING_ID, "new title")).toBeUndefined();
+        expect(update_status(MISSING_ID, "TODO")).toBeUndefined();
+        expect(update_priority(MISSING_ID, "LOW")).toBeUndefined();
+
+        expect(printed_lines(log)).toEqual([missing_copy, missing_copy, missing_copy]);
+    });
+
+    it("label add and remove report the missing issue", () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(add_labels(MISSING_ID, ["bug"])).toBeUndefined();
+        expect(remove_labels(MISSING_ID, ["bug"])).toBeUndefined();
+
+        expect(printed_lines(log)).toEqual([missing_copy, missing_copy]);
+    });
+});
+
+describe("label feedback", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("warns on an existing label and succeeds on a new one", () => {
+        const issue = create_issue("Label feedback add", "Issue for label tests", undefined, undefined, ["seed"]);
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        add_labels(issue.id, ["seed", "extra"]);
+
+        expect(printed_lines(log)).toEqual([
+            `! Issue #${issue.id} already has label "seed".`,
+            `✓ Added "extra" to issue #${issue.id}.`,
+        ]);
+
+        delete_issue(issue.id);
+    });
+
+    it("warns on a missing label and succeeds on an existing one", () => {
+        const issue = create_issue("Label feedback remove", "Issue for label tests", undefined, undefined, ["keep"]);
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        remove_labels(issue.id, ["keep", "ghost"]);
+
+        expect(printed_lines(log)).toEqual([
+            `✓ Removed "keep" from issue #${issue.id}.`,
+            `! Issue #${issue.id} does not have label "ghost".`,
+        ]);
+
+        delete_issue(issue.id);
     });
 });
