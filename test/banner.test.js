@@ -4,6 +4,14 @@ import { version } from "../package.json";
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
 
+describe("banner width", () => {
+    it("fits every fixed line in 60 columns", () => {
+        for (const line of [...LOGO, `${TAGLINE}  v${version}`]) {
+            expect(line.length).toBeLessThanOrEqual(60);
+        }
+    });
+});
+
 describe("showWelcome", () => {
     afterEach(() => vi.restoreAllMocks());
 

@@ -1,6 +1,7 @@
 const { theme } = require('./theme')
 
 const ANSI = /\x1b\[[0-9;]*m/g
+const ANSI_TOKEN = /(\x1b\[[0-9;?]*[ -/]*[@-~])/
 
 const visible_length = text => String(text).replace(ANSI, '').length
 
@@ -9,8 +10,24 @@ const pad = (text, width) => text + ' '.repeat(Math.max(0, width - visible_lengt
 function truncate(text, width) {
     const value = String(text)
     if (visible_length(value) <= width) return value
-    if (width <= 1) return '…'.slice(0, width)
-    return `${value.slice(0, width - 1)}…`
+    if (width <= 0) return ''
+    const limit = width - 1
+    let out = ''
+    let visible = 0
+    for (const token of value.split(ANSI_TOKEN)) {
+        if (!token) continue
+        if (token.startsWith('\x1b[')) {
+            if (visible < limit) out += token
+            continue
+        }
+        const take = Math.min(token.length, limit - visible)
+        out += token.slice(0, take)
+        visible += take
+        if (visible >= limit) break
+    }
+    out += '…'
+    if (out.includes('\x1b[') && !out.endsWith('\x1b[0m')) out += '\x1b[0m'
+    return out
 }
 
 function resolve_width(width = process.stdout.columns) {
@@ -88,9 +105,9 @@ function format_list_header(layout) {
 function format_row(issue, { width, now = Date.now() } = {}) {
     const layout = list_layout(width)
     const cells = [
-        theme.muted(pad(`#${issue.id}`, LIST_COLUMNS.id)),
-        pad(theme.priority(issue.priority), LIST_COLUMNS.priority),
-        pad(theme.status(issue.status), LIST_COLUMNS.status),
+        theme.muted(pad(truncate(`#${issue.id}`, LIST_COLUMNS.id), LIST_COLUMNS.id)),
+        pad(truncate(theme.priority(issue.priority), LIST_COLUMNS.priority), LIST_COLUMNS.priority),
+        pad(truncate(theme.status(issue.status), LIST_COLUMNS.status), LIST_COLUMNS.status),
         pad(truncate(issue.title, layout.title), layout.title),
     ]
     if (layout.showLabels) {
@@ -98,7 +115,7 @@ function format_row(issue, { width, now = Date.now() } = {}) {
         cells.push(pad(theme.muted(truncate(labels, LIST_COLUMNS.labels)), LIST_COLUMNS.labels))
     }
     if (layout.showUpdated) {
-        cells.push(theme.muted(format_relative_time(issue.updated_timestamp ?? issue.created_timestamp, now)))
+        cells.push(theme.muted(truncate(format_relative_time(issue.updated_timestamp ?? issue.created_timestamp, now), LIST_COLUMNS.updated)))
     }
     return cells.join('  ').trimEnd()
 }
@@ -130,7 +147,7 @@ function format_comments(comments, { width } = {}) {
 function format_issue(issue, { width, now = Date.now() } = {}) {
     const cols = resolve_width(width)
     const inner = cols - 4
-    const content = text => `${theme.muted('│')} ${pad(text, inner)} ${theme.muted('│')}`
+    const content = text => `${theme.muted('│')} ${pad(truncate(text, inner), inner)} ${theme.muted('│')}`
     const field = (label, value) => content(`${theme.muted(label.padEnd(10))}${value}`)
     const heading = `#${issue.id}`
     const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - heading.length - 5))}╮`)}`
