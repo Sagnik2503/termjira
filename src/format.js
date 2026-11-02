@@ -1,6 +1,7 @@
 const { theme } = require('./theme')
 
 const ANSI = /\x1b\[[0-9;]*m/g
+const ANSI_TOKEN = /(\x1b\[[0-9;?]*[ -/]*[@-~])/
 
 const visible_length = text => String(text).replace(ANSI, '').length
 
@@ -9,8 +10,24 @@ const pad = (text, width) => text + ' '.repeat(Math.max(0, width - visible_lengt
 function truncate(text, width) {
     const value = String(text)
     if (visible_length(value) <= width) return value
-    if (width <= 1) return '…'.slice(0, width)
-    return `${value.slice(0, width - 1)}…`
+    if (width <= 0) return ''
+    const limit = width - 1
+    let out = ''
+    let visible = 0
+    for (const token of value.split(ANSI_TOKEN)) {
+        if (!token) continue
+        if (token.startsWith('\x1b[')) {
+            if (visible < limit) out += token
+            continue
+        }
+        const take = Math.min(token.length, limit - visible)
+        out += token.slice(0, take)
+        visible += take
+        if (visible >= limit) break
+    }
+    out += '…'
+    if (out.includes('\x1b[') && !out.endsWith('\x1b[0m')) out += '\x1b[0m'
+    return out
 }
 
 function resolve_width(width = process.stdout.columns) {
@@ -37,20 +54,26 @@ function format_absolute_time(timestamp) {
 }
 
 function wrap(text, width) {
-    const words = String(text ?? '').split(/\s+/).filter(Boolean)
-    if (words.length === 0) return ['']
+    const cols = Math.max(1, Math.floor(width))
     const lines = []
     let line = ''
-    for (const word of words) {
-        // shortcut: a word longer than width is not split; fine for titles and descriptions
-        if (!line) line = word
-        else if (line.length + 1 + word.length <= width) line += ` ${word}`
-        else {
-            lines.push(line)
-            line = word
+    for (const word of String(text ?? '').split(/\s+/).filter(Boolean)) {
+        let rest = word
+        if (line && line.length + 1 + rest.length <= cols) {
+            line += ` ${rest}`
+            continue
         }
+        if (line) {
+            lines.push(line)
+            line = ''
+        }
+        while (rest.length > cols) {
+            lines.push(rest.slice(0, cols))
+            rest = rest.slice(cols)
+        }
+        line = rest
     }
-    lines.push(line)
+    if (line || lines.length === 0) lines.push(line)
     return lines
 }
 
@@ -82,9 +105,9 @@ function format_list_header(layout) {
 function format_row(issue, { width, now = Date.now() } = {}) {
     const layout = list_layout(width)
     const cells = [
-        theme.muted(pad(`#${issue.id}`, LIST_COLUMNS.id)),
-        pad(theme.priority(issue.priority), LIST_COLUMNS.priority),
-        pad(theme.status(issue.status), LIST_COLUMNS.status),
+        theme.muted(pad(truncate(`#${issue.id}`, LIST_COLUMNS.id), LIST_COLUMNS.id)),
+        pad(truncate(theme.priority(issue.priority), LIST_COLUMNS.priority), LIST_COLUMNS.priority),
+        pad(truncate(theme.status(issue.status), LIST_COLUMNS.status), LIST_COLUMNS.status),
         pad(truncate(issue.title, layout.title), layout.title),
     ]
     if (layout.showLabels) {
@@ -92,7 +115,7 @@ function format_row(issue, { width, now = Date.now() } = {}) {
         cells.push(pad(theme.muted(truncate(labels, LIST_COLUMNS.labels)), LIST_COLUMNS.labels))
     }
     if (layout.showUpdated) {
-        cells.push(theme.muted(format_relative_time(issue.updated_timestamp ?? issue.created_timestamp, now)))
+        cells.push(theme.muted(truncate(format_relative_time(issue.updated_timestamp ?? issue.created_timestamp, now), LIST_COLUMNS.updated)))
     }
     return cells.join('  ').trimEnd()
 }
@@ -100,11 +123,81 @@ function format_row(issue, { width, now = Date.now() } = {}) {
 function format_list(issues, { width, now = Date.now(), context } = {}) {
     const layout = list_layout(width)
     return [
-        theme.bold(context ?? `Issues · ${issues.length}`),
+        theme.bold(truncate(context ?? `Issues · ${issues.length}`, layout.cols)),
         theme.rule(layout.cols),
         format_list_header(layout),
         ...issues.map(issue => format_row(issue, { width: layout.cols, now })),
     ].join('\n')
 }
 
-module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list }
+function format_comments(comments, { width } = {}) {
+    if (!comments?.length) return ''
+    const cols = resolve_width(width)
+    const lines = [theme.bold(`Comments (${comments.length})`), theme.rule(cols)]
+    for (const comment of comments) {
+        const prefix = `#${comment.id} `
+        const wrapped = wrap(comment.text, Math.max(10, cols - prefix.length))
+        lines.push(`${theme.muted(`#${comment.id}`)} ${wrapped[0]}`)
+        for (const extra of wrapped.slice(1)) lines.push(`${' '.repeat(prefix.length)}${extra}`)
+        lines.push('')
+    }
+    return lines.join('\n').trimEnd()
+}
+
+function format_issue(issue, { width, now = Date.now() } = {}) {
+    const cols = resolve_width(width)
+    const inner = cols - 4
+    const content = text => `${theme.muted('│')} ${pad(truncate(text, inner), inner)} ${theme.muted('│')}`
+    const field = (label, value) => content(`${theme.muted(label.padEnd(CARD_LABEL_WIDTH))}${value}`)
+    const heading = `#${issue.id}`
+    const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - heading.length - 5))}╮`)}`
+    const bottom = theme.muted(`╰${'─'.repeat(Math.max(0, cols - 2))}╯`)
+    const plainLabels = issue.labels?.length ? issue.labels.join(', ') : '—'
+    const labels = theme.muted(truncate(plainLabels, inner - CARD_LABEL_WIDTH))
+    const updated = issue.updated_timestamp ?? issue.created_timestamp
+
+    const lines = [top]
+    for (const line of wrap(issue.title, inner)) lines.push(content(theme.bold(line)))
+    lines.push(content(''))
+    for (const line of wrap(issue.description || '—', inner)) lines.push(content(line))
+    lines.push(content(''))
+    lines.push(field('Status', theme.status(issue.status)))
+    lines.push(field('Priority', theme.priority(issue.priority)))
+    lines.push(field('Labels', labels))
+    lines.push(field('Created', `${theme.muted(format_relative_time(issue.created_timestamp, now))} ${theme.muted('·')} ${theme.muted(format_absolute_time(issue.created_timestamp))}`))
+    lines.push(field('Updated', `${theme.muted(format_relative_time(updated, now))} ${theme.muted('·')} ${theme.muted(format_absolute_time(updated))}`))
+    lines.push(bottom)
+
+    const comments = format_comments(issue.comments ?? [], { width: cols })
+    return comments ? `${lines.join('\n')}\n\n${comments}` : lines.join('\n')
+}
+
+const CARD_LABEL_WIDTH = 10
+const HELP_USAGE_MAX = 40
+
+function format_help(sections, { width } = {}) {
+    const cols = resolve_width(width)
+    const longest = Math.max(0, ...sections.flatMap(([, rows]) => rows.map(([usage]) => usage.length)))
+    const usageWidth = Math.max(1, Math.min(cols - 30, HELP_USAGE_MAX, longest))
+    const out = []
+    for (const [title, rows] of sections) {
+        out.push(theme.bold(title))
+        out.push(theme.rule(cols))
+        for (const [usage, description] of rows) {
+            if (usage.length > usageWidth) {
+                for (const line of wrap(usage, Math.max(10, cols - 2))) out.push(`  ${theme.accent(line)}`)
+                for (const line of wrap(description, Math.max(10, cols - 4))) out.push(`    ${theme.muted(line)}`)
+            } else {
+                const descColumn = usageWidth + 4
+                const wrapped = wrap(description, Math.max(1, cols - descColumn))
+                out.push(`  ${theme.accent(pad(usage, usageWidth))}  ${theme.muted(wrapped[0])}`)
+                for (const line of wrapped.slice(1)) out.push(`${' '.repeat(descColumn)}${theme.muted(line)}`)
+            }
+        }
+        out.push(`  ${theme.muted('Try:')} ${theme.accent(truncate(rows[0][0], Math.max(1, cols - 8)))}`)
+        out.push('')
+    }
+    return out.join('\n').trimEnd()
+}
+
+module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list, format_issue, format_comments, format_help }

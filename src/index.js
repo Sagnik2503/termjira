@@ -1,8 +1,12 @@
 const readline = require('readline')
 const prompt = require("prompt-sync")()
-const { create_issue, list_issues, show_issue, format_issue, format_row, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, STATUSES, PRIORITIES} = require('./issue')
+const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, issue_not_found, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
-const { log_error, color_command, color_help_header, color_muted } = require('./colors')
+const { format_list } = require('./format')
+const { filter_context, sort_context } = require('./query')
+const { log_error, log_warn, log_success, color_muted } = require('./colors')
+const { theme } = require('./theme')
+const { show_help } = require('./help')
 const { showWelcome } = require('./banner')
 const { log } = require('console')
 
@@ -33,65 +37,22 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-const HELP_SECTIONS = [
-    ["General", [
-        ["help", "Show available commands"],
-        ["exit", "Exit TermJira"],
-    ]],
-    ["Issues", [
-        ["create", "Create a new issue"],
-        ["list", "List all issues"],
-        ["show <id>", "Show an issue"],
-        ["update <id> <title|description|status|priority> <value>", "Update an issue field"],
-        ["delete <id> [--force]", "Delete an issue (asks for confirmation unless --force)"],
-    ]],
-    ["Labels", [
-        ["label list", "List all labels in use"],
-        ["label add <id> <label>[,<label>...]", "Add labels to an issue"],
-        ["label remove <id> <label>[,<label>...]", "Remove labels from an issue"],
-    ]],
-    ["Comments", [
-        ["comment add <id> \"<text>\"", "Add a comment to an issue"],
-        ["comment delete <id> <commentId>", "Delete a comment from an issue"],
-    ]],
-    ["Search", [
-        ['filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]', "Filter issues"],
-        ["sort [--by id|priority|status|created] [--order asc|desc]", "Sort issues"],
-    ]],
-]
-
-function showHelp() {
-    const width = Math.max(...HELP_SECTIONS.flatMap(([, rows]) => rows.map(([usage]) => usage.length)).filter(length => length < 60))
-    console.log(color_help_header("Available commands:"))
-    HELP_SECTIONS.forEach(([title, rows]) => {
-        console.log()
-        console.log(color_help_header(title))
-        rows.forEach(([usage, description]) => {
-            if (usage.length > width) {
-                console.log(`  ${color_command(usage)}`)
-                console.log(`    ${color_muted(description)}`)
-            } else {
-                console.log(`  ${color_command(usage.padEnd(width))}  ${color_muted(description)}`)
-            }
-        })
-    })
-}
-
 function confirm(question) {
     return new Promise(resolve => rl.question(question, answer => resolve(answer)))
 }
 
 function askField(name, values, fallback) {
     while (true) {
-        const value = String(prompt(`${name} for the issue (${values.join(", ")}): `) ?? "").trim().toUpperCase()
+        const answer = prompt(`${theme.bold(name)} ${theme.muted(`(${values.join(', ')})`)} [${theme.accent(fallback)}]: `)
+        const value = String(answer ?? "").trim().toUpperCase()
         if (!value) return fallback
         if (values.includes(value)) return value
-        log_error(`Invalid ${name.toLowerCase()}. Choose between ${values.join(", ")}`)
+        log_error(`Invalid ${name.toLowerCase()}. Choose between ${values.join(', ')}`)
     }
 }
 
 const commands = {
-    help: showHelp,
+    help: show_help,
     list: list_issues,
     show: ([id]) => {
         if (!id) {
@@ -101,13 +62,13 @@ const commands = {
         show_issue(Number(id))
     },
     create: () => {
-        const title = prompt("Title for the issue: ");
-        const description = prompt("Description for the issue: ");
+        const title = prompt(`${theme.bold("Title")}: `);
+        const description = prompt(`${theme.bold("Description")}: `);
         const status = askField("Status", STATUSES, "TODO");
         const priority = askField("Priority", PRIORITIES, "MEDIUM");
-        const labels = prompt("Labels for the issue (optional, comma separated): ");
+        const labels = prompt(`${theme.bold("Labels")} ${theme.muted("(optional, comma separated)")}: `);
         const issue = create_issue(title, description, status, priority, labels);
-        if (issue) console.log(`Issue created! ID: ${issue.id}`);
+        if (issue) log_success(`Issue #${issue.id} created — ${issue.title}`);
     },
     exit: () => {
         console.log("Goodbye!")
@@ -138,18 +99,18 @@ const commands = {
         }
         const issue = get_issue(id)
         if (!issue) {
-            log_error("Issue DNE")
+            issue_not_found(id)
             return
         }
         if (!force) {
             const answer = String(await confirm(`Delete issue #${issue.id} "${issue.title}"? (y/N) `)).trim().toLowerCase()
             if (answer !== "y" && answer !== "yes") {
-                console.log("Delete cancelled.")
+                log_warn("Delete cancelled.")
                 return
             }
         }
         const deleted = delete_issue(id)
-        if (deleted) console.log(`Deleted issue #${deleted.id}: ${deleted.title}`)
+        if (deleted) log_success(`Deleted issue #${deleted.id}: ${deleted.title}`)
     },
     label: (args)=>{
         const action = String(args[0] ?? "").toLowerCase()
@@ -186,10 +147,12 @@ const commands = {
         const result=sort_issues(options.by, options.order)
         if (result === null) return
         if (result.length === 0) {
-            console.log("No issues found")
+            log_warn('No issues yet — create one with "create".')
             return
         }
-        result.forEach(issue => console.log(format_row(issue, true)))
+        const by = options.by ?? 'id'
+        const order = options.order ?? 'asc'
+        console.log(format_list(result, { context: sort_context(result.length, by, order) }))
     },
     filter: (args)=>{
         const flags={}
@@ -222,10 +185,10 @@ const commands = {
         const result=filter_issues(flags.status, flags.priority, flags.title, flags.description, flags.label)
         if (result === null) return
         if (result.length === 0) {
-            console.log("No matching issues found.")
-        } else {
-            result.forEach(issue => console.log(format_row(issue)))
+            log_warn('No matching issues. Try removing a filter.')
+            return
         }
+        console.log(format_list(result, { context: filter_context(result.length, flags) }))
     },
     comment: (args)=>{
         const action = String(args[0] ?? "").toLowerCase()
@@ -238,7 +201,7 @@ const commands = {
                 return
             }
             const issue = add_comments(id, quoted[1])
-            if (issue) console.log(`Added comment #${issue.comments.at(-1).id} to issue #${issue.id}.`)
+            if (issue) log_success(`Added comment #${issue.comments.at(-1).id} to issue #${issue.id}.`)
             return
         }
         if (action === "delete") {
@@ -249,7 +212,7 @@ const commands = {
                 return
             }
             const removed = delete_comment(id, commentId)
-            if (removed) console.log(`Deleted comment #${removed.id} from issue #${id}: ${removed.text}`)
+            if (removed) log_success(`Deleted comment #${removed.id} from issue #${id}: ${removed.text}`)
             return
         }
         log_error('Usage: comment add <id> "<text>" | comment delete <id> <commentId>')
@@ -260,11 +223,11 @@ showWelcome()
 console.log(color_muted('Type "help" for available commands.'))
 function askCommand() {
     console.log()
-    rl.question("tj> ", async (answer) => {
+    rl.question(theme.prompt(), async (answer) => {
         const [command, ...args] = answer.trim().split(/\s+/)
         const handler = commands[command.toLowerCase()]
         if (!handler) {
-            log_error("unknown command")
+            log_error(`Unknown command "${command}". Type "help" to see commands.`)
         } else {
             const result = handler(args)
             if (result === false) return
