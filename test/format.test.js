@@ -10,6 +10,7 @@ import {
     format_comments,
     format_help,
 } from "../src/format.js";
+import { HELP_SECTIONS } from "../src/help.js";
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -99,6 +100,15 @@ describe("format_list", () => {
         expect(out).toContain("PRIORITY");
         expect(out).toContain("STATUS");
     });
+
+    it.each([60, 80, 100])("keeps a long context line within %i columns", width => {
+        const context = '5 matches · status=TODO · priority=HIGH · title~"login page broken" · description~"session expiry" · labels=bug+auth';
+        const lines = stripAnsi(format_list([issue], { width, context, now: 0 })).split("\n");
+
+        expect(lines[0].length).toBeLessThanOrEqual(width);
+        expect(lines[0].startsWith("5 matches")).toBe(true);
+        expect(lines[0]).toContain("…");
+    });
 });
 
 describe("format_issue", () => {
@@ -166,8 +176,6 @@ describe("format_comments", () => {
         expect(format_comments([], { width: 60 })).toBe("");
     });
 });
-
-import { HELP_SECTIONS } from "../src/help.js";
 
 describe("format_help", () => {
     const titles = ["General", "Issues", "Labels", "Comments", "Search"];

@@ -106,7 +106,7 @@ function format_row(issue, { width, now = Date.now() } = {}) {
 function format_list(issues, { width, now = Date.now(), context } = {}) {
     const layout = list_layout(width)
     return [
-        theme.bold(context ?? `Issues · ${issues.length}`),
+        theme.bold(truncate(context ?? `Issues · ${issues.length}`, layout.cols)),
         theme.rule(layout.cols),
         format_list_header(layout),
         ...issues.map(issue => format_row(issue, { width: layout.cols, now })),
