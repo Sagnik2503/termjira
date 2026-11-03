@@ -219,6 +219,39 @@ describe("create_issue", () => {
     });
 });
 
+describe("update normalization", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("trims and uppercases status updates", () => {
+        const issue = create_issue("Normalize status", "Lowercase and padded status");
+
+        expect(update_status(issue.id, "  in_progress  ").status).toBe("IN_PROGRESS");
+        expect(get_issue(issue.id).status).toBe("IN_PROGRESS");
+
+        delete_issue(issue.id);
+    });
+
+    it("trims and uppercases priority updates", () => {
+        const issue = create_issue("Normalize priority", "Padded priority");
+
+        expect(update_priority(issue.id, "  high  ").priority).toBe("HIGH");
+        expect(get_issue(issue.id).priority).toBe("HIGH");
+
+        delete_issue(issue.id);
+    });
+
+    it("rejects an invalid status and priority", () => {
+        const issue = create_issue("Invalid update", "Unparseable values");
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(update_status(issue.id, "nope")).toBeUndefined();
+        expect(update_priority(issue.id, "nope")).toBeUndefined();
+        expect(log).toHaveBeenCalled();
+
+        delete_issue(issue.id);
+    });
+});
+
 describe("comments", () => {
     afterEach(() => vi.restoreAllMocks());
 
