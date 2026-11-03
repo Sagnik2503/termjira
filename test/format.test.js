@@ -16,6 +16,23 @@ import { HELP_SECTIONS } from "../src/help.js";
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
 const ANSI_ALL = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+const graphemesOf = text => Array.from(
+    new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text),
+    part => part.segment,
+);
+const hasLoneSurrogate = text => {
+    for (let i = 0; i < text.length; i += 1) {
+        const code = text.charCodeAt(i);
+        if (code >= 0xd800 && code <= 0xdbff) {
+            const next = text.charCodeAt(i + 1);
+            if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+            i += 1;
+        } else if (code >= 0xdc00 && code <= 0xdfff) {
+            return true;
+        }
+    }
+    return false;
+};
 
 function run_node(script, env) {
     const child_env = { ...process.env };
@@ -326,5 +343,115 @@ describe("screen width safety", () => {
         for (const [key, text] of Object.entries(out)) {
             expect(text, key).not.toContain("\x1b");
         }
+    });
+});
+
+describe("display width", () => {
+    it("measures wide and emoji characters by display columns", () => {
+        expect(visible_length("日本語")).toBe(6);
+        expect(visible_length("😀")).toBe(2);
+        expect(visible_length("a😀日")).toBe(5);
+        expect(visible_length("\x1b[31m日本\x1b[39m")).toBe(4);
+    });
+
+    it("truncates emoji and CJK without splitting graphemes or producing lone surrogates", () => {
+        const samples = ["😀😀😀😀😀", "日本語のタイトルです", "👨‍👩‍👧‍👦".repeat(4), "a😀日b"];
+
+        for (const sample of samples) {
+            const all = graphemesOf(sample);
+            for (let width = 2; width < visible_length(sample); width += 1) {
+                const out = truncate(sample, width);
+                expect(out.endsWith("…"), `${sample} @ ${width}`).toBe(true);
+                expect(visible_length(out), `${sample} @ ${width}`).toBeLessThanOrEqual(width);
+                expect(hasLoneSurrogate(out), `${sample} @ ${width}`).toBe(false);
+                const kept = graphemesOf(out.slice(0, -1));
+                expect(kept).toEqual(all.slice(0, kept.length));
+            }
+        }
+    });
+
+    it("hard-splits wide words without exceeding the width", () => {
+        const lines = wrap("日".repeat(10), 5);
+
+        expect(lines.join("")).toBe("日".repeat(10));
+        for (const line of lines) expect(visible_length(line)).toBeLessThanOrEqual(5);
+    });
+});
+
+describe("wide character rendering", () => {
+    const wide_issue = {
+        ...issue,
+        title: "日本語のタイトル".repeat(12),
+        labels: ["ラベル", "😀絵文字"],
+    };
+
+    const wide_detail = {
+        id: 7,
+        title: "日本語のタイトル".repeat(12),
+        description: `😀${"説明文".repeat(40)}`,
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        labels: ["ラベル", "😀"],
+        comments: [{ id: 1, text: "日本語のコメント".repeat(20) }],
+        created_timestamp: 0,
+        updated_timestamp: 0,
+    };
+
+    it.each([60, 80, 100])("keeps wide list rows within %i columns", width => {
+        const row = stripAnsi(format_row(wide_issue, { width, now: 0 }));
+
+        expect(visible_length(row)).toBeLessThanOrEqual(width);
+    });
+
+    it.each([60, 80, 100])("keeps wide card borders aligned at %i columns", width => {
+        const lines = stripAnsi(format_issue(wide_detail, { width, now: 0 })).split("\n");
+
+        for (const line of lines) expect(visible_length(line)).toBeLessThanOrEqual(width);
+        const borders = lines.filter(line => /^[│╭╰]/.test(line));
+        for (const line of borders) expect(visible_length(line)).toBe(width);
+    });
+
+    it.each([60, 80, 100])("keeps wide help lines within %i columns", width => {
+        const sections = [[
+            "検索",
+            [
+                ["filter --title <日本語>", "日本語の説明文を表示します。".repeat(6)],
+                ["sort <日本語>", "説明😀".repeat(10)],
+            ],
+        ]];
+
+        for (const line of stripAnsi(format_help(sections, { width })).split("\n")) {
+            expect(visible_length(line)).toBeLessThanOrEqual(width);
+        }
+    });
+});
+
+describe("control-safe rendering", () => {
+    const CONTROL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/;
+    const nasty = "safe\x1b[2Jtitle\x07\x00";
+
+    it("removes control characters and escape sequences from user text", () => {
+        const row = stripAnsi(format_row({ ...issue, title: nasty }, { width: 60, now: 0 }));
+        expect(row).not.toMatch(CONTROL);
+        expect(row).toContain("safetitle");
+
+        const card = stripAnsi(format_issue({
+            id: 1,
+            title: nasty,
+            description: nasty,
+            status: "TODO",
+            priority: "LOW",
+            labels: [nasty],
+            comments: [{ id: 1, text: nasty }],
+            created_timestamp: 0,
+            updated_timestamp: 0,
+        }, { width: 60, now: 0 }));
+
+        expect(card).not.toMatch(CONTROL);
+        expect(card).toContain("safetitle");
+    });
+
+    it("does not count control characters as visible width", () => {
+        expect(visible_length("a\x07b")).toBe(2);
     });
 });
