@@ -1,5 +1,4 @@
 const readline = require('readline')
-const prompt = require("prompt-sync")()
 const { create_issue, list_issues, show_issue, format_issue, edit_description, edit_title, update_status, update_priority, add_labels, remove_labels, list_labels, get_issue, delete_issue, filter_issues, sort_issues, count_issues, add_comments, delete_comment, issue_not_found, STATUSES, PRIORITIES} = require('./issue')
 const { markAsUncloneable } = require('worker_threads')
 const { format_list } = require('./format')
@@ -16,14 +15,45 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-function confirm(question) {
-    return new Promise(resolve => rl.question(question, answer => resolve(answer)))
+let input_closed = false
+const buffered_lines = []
+const waiting_for_line = []
+
+rl.on('line', line => {
+    if (waiting_for_line.length > 0) waiting_for_line.shift()(line)
+    else buffered_lines.push(line)
+})
+
+rl.on('close', () => {
+    input_closed = true
+    while (waiting_for_line.length > 0) waiting_for_line.shift()(null)
+})
+
+function ask(question) {
+    return new Promise(resolve => {
+        if (buffered_lines.length > 0) {
+            process.stdout.write(question)
+            resolve(buffered_lines.shift())
+            return
+        }
+        if (input_closed) {
+            resolve(null)
+            return
+        }
+        process.stdout.write(question)
+        waiting_for_line.push(resolve)
+    })
 }
 
-function askField(name, values, fallback) {
+function confirm(question) {
+    return ask(question)
+}
+
+async function askField(name, values, fallback) {
     while (true) {
-        const answer = prompt(`${theme.bold(name)} ${theme.muted(`(${values.join(', ')})`)} [${theme.accent(fallback)}]: `)
-        const value = String(answer ?? "").trim().toUpperCase()
+        const answer = await ask(`${theme.bold(name)} ${theme.muted(`(${values.join(', ')})`)} [${theme.accent(fallback)}]: `)
+        if (answer === null) return null
+        const value = String(answer).trim().toUpperCase()
         if (!value) return fallback
         if (values.includes(value)) return value
         log_error(`Invalid ${name.toLowerCase()}. Choose between ${values.join(', ')}`)
@@ -40,12 +70,17 @@ const commands = {
         }
         show_issue(Number(id))
     },
-    create: () => {
-        const title = prompt(`${theme.bold("Title")}: `);
-        const description = prompt(`${theme.bold("Description")}: `);
-        const status = askField("Status", STATUSES, "TODO");
-        const priority = askField("Priority", PRIORITIES, "MEDIUM");
-        const labels = prompt(`${theme.bold("Labels")} ${theme.muted("(optional, comma separated)")}: `);
+    create: async () => {
+        const title = await ask(`${theme.bold("Title")}: `);
+        if (title === null) return;
+        const description = await ask(`${theme.bold("Description")}: `);
+        if (description === null) return;
+        const status = await askField("Status", STATUSES, "TODO");
+        if (status === null) return;
+        const priority = await askField("Priority", PRIORITIES, "MEDIUM");
+        if (priority === null) return;
+        const labels = await ask(`${theme.bold("Labels")} ${theme.muted("(optional, comma separated)")}: `);
+        if (labels === null) return;
         const issue = create_issue(title, description, status, priority, labels);
         if (issue) log_success(`Issue #${issue.id} created — ${issue.title}`);
     },
@@ -201,19 +236,19 @@ const commands = {
 
 showWelcome()
 console.log(color_muted('Type "help" for available commands.'))
-function askCommand() {
+async function askCommand() {
     console.log()
-    rl.question(theme.prompt(), async (answer) => {
-        const [command, ...args] = answer.trim().split(/\s+/)
-        const handler = commands[command.toLowerCase()]
-        if (!handler) {
-            log_error(`Unknown command "${command}". Type "help" to see commands.`)
-        } else {
-            const result = handler(args)
-            if (result === false) return
-            if (result instanceof Promise) await result
-        }
-        askCommand()
-    })
+    const answer = await ask(theme.prompt())
+    if (answer === null) return
+    const [command, ...args] = answer.trim().split(/\s+/)
+    const handler = commands[command.toLowerCase()]
+    if (!handler) {
+        log_error(`Unknown command "${command}". Type "help" to see commands.`)
+    } else {
+        const result = handler(args)
+        if (result === false) return
+        if (result instanceof Promise) await result
+    }
+    askCommand()
 }
 askCommand()
