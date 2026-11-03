@@ -9,7 +9,7 @@ const store_dir = mkdtempSync(join(tmpdir(), "termjira-test-"));
 const result_dir = mkdtempSync(join(tmpdir(), "termjira-results-"));
 process.env.TERMJIRA_HOME = store_dir;
 
-const { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, update_status, update_priority, issue_not_found } = await import("../src/issue.js");
+const { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, edit_description, update_status, update_priority, issue_not_found } = await import("../src/issue.js");
 
 afterAll(() => {
     rmSync(store_dir, { recursive: true, force: true });
@@ -216,6 +216,69 @@ describe("create_issue", () => {
         expect(issue.status).toBe("TODO");
         expect(issue.priority).toBe("MEDIUM");
         expect(issue.labels).toEqual(["bug", "ui"]);
+    });
+});
+
+describe("control-safe storage", () => {
+    const store_path = () => join(store_dir, "issue_store.json");
+    const stored_issue = id => JSON.parse(readFileSync(store_path(), "utf8")).find(issue => issue.id === id);
+
+    it("strips escape codes from title, description and labels before persisting", () => {
+        const issue = create_issue(
+            "Fix\x1b[2J login",
+            "Broken\x1b]0;pwned\x07 session",
+            undefined,
+            undefined,
+            ["bug\x1b[31m", "ui"],
+        );
+
+        expect(stored_issue(issue.id)).toMatchObject({
+            title: "Fix login",
+            description: "Broken session",
+            labels: ["bug", "ui"],
+        });
+        expect(JSON.stringify(stored_issue(issue.id))).not.toMatch(/\x1b/);
+
+        delete_issue(issue.id);
+    });
+
+    it("strips escape codes from edits, labels and comments before persisting", () => {
+        const issue = create_issue("Control edits", "Issue for control tests");
+
+        edit_title(issue.id, "New\x1b[2J title");
+        edit_description(issue.id, "New\x1b]0;pwned\x07 description");
+        add_labels(issue.id, ["evil\x1b[31m"]);
+        add_comments(issue.id, "Comment\x1b[2J text");
+
+        expect(stored_issue(issue.id)).toMatchObject({
+            title: "New title",
+            description: "New description",
+            labels: ["evil"],
+            comments: [{ id: 1, text: "Comment text" }],
+        });
+        expect(JSON.stringify(stored_issue(issue.id))).not.toMatch(/\x1b/);
+
+        delete_issue(issue.id);
+    });
+
+    it("sanitizes text already in the store when rendering", () => {
+        const issue = create_issue("Render guard", "Issue for render guard");
+        const data = JSON.parse(readFileSync(store_path(), "utf8"));
+        const target = data.find(element => element.id === issue.id);
+        target.title = "bad\x1b[2Jtitle";
+        target.description = "bad\x1b]0;pwned\x07description";
+        target.labels = ["bug\x1b[31m"];
+        target.comments = [{ id: 1, text: "bad\x1b[2Jcomment" }];
+        writeFileSync(store_path(), JSON.stringify(data, null, 2));
+
+        const out = format_issue(get_issue(issue.id), { width: 100, now: 0 });
+
+        expect(out).not.toContain("\x1b[2J");
+        expect(out).not.toContain("\x1b]0;");
+        expect(out).toContain("badtitle");
+        expect(out).toContain("badcomment");
+
+        delete_issue(issue.id);
     });
 });
 

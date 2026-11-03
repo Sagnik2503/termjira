@@ -1,6 +1,6 @@
 const { copyFileSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } = require('node:fs')
 const { color_label, log_error, log_warn, log_success } = require('./colors')
-const { format_issue, format_row, format_list } = require('./format')
+const { format_issue, format_row, format_list, strip_control } = require('./format')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -43,7 +43,7 @@ function normalize_labels(labels) {
     const seen = new Set()
     const result = []
     for (const label of list) {
-        const value = String(label).trim().toLowerCase()
+        const value = strip_control(String(label)).trim().toLowerCase()
         if (!value || seen.has(value)) continue
         seen.add(value)
         result.push(value)
@@ -85,7 +85,13 @@ function read_issues() {
         preserve_broken_store("Issue store is not a list")
         return []
     }
-    for (const issue of data) issue.comments = normalize_comments(issue.comments)
+    for (const issue of data) {
+        issue.title = strip_control(issue.title)
+        issue.description = strip_control(issue.description)
+        if (Array.isArray(issue.labels)) issue.labels = issue.labels.map(strip_control)
+        issue.comments = normalize_comments(issue.comments)
+            .map(comment => ({ ...comment, text: strip_control(comment.text) }))
+    }
     return data
 }
 
@@ -111,8 +117,8 @@ function next_id(issues) {
 }
 
 function create_issue(title, description, status = "TODO", priority = "MEDIUM", labels = []) {
-    title = String(title ?? "").trim()
-    description = String(description ?? "").trim()
+    title = strip_control(String(title ?? "")).trim()
+    description = strip_control(String(description ?? "")).trim()
     status = String(status ?? "").trim().toUpperCase() || "TODO"
     priority = String(priority ?? "").trim().toUpperCase() || "MEDIUM"
 
@@ -159,7 +165,7 @@ function show_issue(id) {
 }
 
 function edit_title(id, title) {
-    title = String(title ?? "").trim()
+    title = strip_control(String(title ?? "")).trim()
     if (!title) {
         log_error("Title cannot be empty.")
         return
@@ -177,7 +183,7 @@ function edit_title(id, title) {
 }
 
 function edit_description(id, description) {
-    description = String(description ?? "").trim()
+    description = strip_control(String(description ?? "")).trim()
     if (!description) {
         log_error("Description cannot be empty.")
         return
@@ -373,7 +379,7 @@ function filter_issues(status, priority, title, description, labels = []) {
 }
 
 function add_comments(id, comment){
-    const text = String(comment ?? "").trim()
+    const text = strip_control(String(comment ?? "")).trim()
     if(text === ""){
         log_error("Provide a comment")
         return
