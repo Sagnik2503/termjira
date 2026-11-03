@@ -1,7 +1,52 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, update_status, update_priority, issue_not_found } from "../src/issue.js";
+import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// Point the store at a throwaway directory before issue.js resolves its path.
+const store_dir = mkdtempSync(join(tmpdir(), "termjira-test-"));
+process.env.TERMJIRA_HOME = store_dir;
+
+const { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, update_status, update_priority, issue_not_found } = await import("../src/issue.js");
+
+afterAll(() => rmSync(store_dir, { recursive: true, force: true }));
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
+
+describe("store location", () => {
+    it("writes issues inside the configured termjira directory", () => {
+        const issue = create_issue("Store location", "Checks the store file");
+
+        expect(existsSync(join(store_dir, "issue_store.json"))).toBe(true);
+        expect(JSON.parse(readFileSync(join(store_dir, "issue_store.json"), "utf8"))).toEqual([
+            expect.objectContaining({ id: issue.id, title: "Store location" }),
+        ]);
+
+        delete_issue(issue.id);
+    });
+
+    it("defaults to ~/.termjira/issue_store.json", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-home-"));
+
+        try {
+            const env = { ...process.env, HOME: home };
+            delete env.TERMJIRA_HOME;
+            execFileSync(process.execPath, ["-e", "require('./src/issue').create_issue('Home default', 'Uses the home directory')"], {
+                cwd: process.cwd(),
+                env,
+                encoding: "utf8",
+            });
+
+            const stored = JSON.parse(readFileSync(join(home, ".termjira", "issue_store.json"), "utf8"));
+            expect(stored).toEqual([
+                expect.objectContaining({ title: "Home default" }),
+            ]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
 
 const MESSAGE_GLYPHS = { success: "✓", warning: "!", error: "✗" };
 const MISSING_ID = 987654321;

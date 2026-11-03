@@ -10,27 +10,6 @@ const { show_help } = require('./help')
 const { showWelcome } = require('./banner')
 const { log } = require('console')
 
-// seed issues for development on an empty store only
-if (count_issues() === 0) {
-// Normal issues
-create_issue("Learn JavaScript", "Practice functions", "TODO", "HIGH", ["learning"])
-create_issue("Build TermJira", "Implement issue creation", "IN_PROGRESS", "HIGH", ["feature", "backend"])
-create_issue("Write unit tests", "Test CRUD operations", "TODO", "MEDIUM", ["testing"])
-create_issue("Update documentation", "Document CLI commands", "CLOSED", "LOW", ["docs"])
-
-// Duplicate and case-insensitive search
-create_issue("Fix login bug", "Fix authentication", "IN_PROGRESS", "HIGH", ["bug", "auth"])
-create_issue("Fix Login Bug", "Handle invalid credentials", "TODO", "LOW", ["bug", "auth"])
-
-// Similar keywords
-create_issue("Improve search", "Support partial matches", "TODO", "MEDIUM", ["search"])
-create_issue("Search by priority", "Filter issues by priority", "CLOSED", "HIGH", ["search"])
-
-// Special characters and numbers
-create_issue("Handle --status flag", "Parse CLI arguments", "IN_PROGRESS", "MEDIUM", ["cli"])
-create_issue("Fix #123 error", "Resolve issue reference bug", "TODO", "LOW", ["bug"])
-}
-
 // creates an interface for terminal input output
 const rl = readline.createInterface({
     input: process.stdin,
@@ -71,7 +50,8 @@ const commands = {
         if (issue) log_success(`Issue #${issue.id} created — ${issue.title}`);
     },
     exit: () => {
-        console.log("Goodbye!")
+        console.log()
+        console.log(`${theme.accent('tj ❯')} ${theme.muted('Goodbye — your issues are saved.')}`)
         rl.close()
         return false
     },

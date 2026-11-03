@@ -1,8 +1,13 @@
-const { readFileSync, writeFileSync } = require('node:fs')
+const { readFileSync, writeFileSync, mkdirSync } = require('node:fs')
 const { color_label, log_error, log_warn, log_success } = require('./colors')
 const { format_issue, format_row, format_list } = require('./format')
+const os = require('node:os')
+const path = require('node:path')
 
-const STORE_PATH = "issue_store.json"
+const STORE_DIR = process.env.TERMJIRA_HOME || path.join(os.homedir(), '.termjira')
+const STORE_PATH = path.join(STORE_DIR, 'issue_store.json')
+
+mkdirSync(STORE_DIR, { recursive: true })
 
 class Issue {
     constructor(id, title, description, status, priority, labels) {
