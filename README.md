@@ -27,10 +27,16 @@ A command-line issue tracking tool inspired by Jira, built with JavaScript and N
 
 1. Clone the repository.
 2. Navigate to the project directory.
-3. Run:
+3. Install the `termjira` command globally:
 
    ```bash
-   npm start
+   npm install -g .
+   ```
+
+4. Run it from anywhere:
+
+   ```bash
+   termjira
    ```
 
 ## Commands
