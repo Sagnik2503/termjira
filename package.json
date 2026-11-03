@@ -1,7 +1,7 @@
 {
   "name": "termjira",
   "version": "1.0.0",
-  "description": "",
+  "description": "A minimal, terminal-based Jira clone.",
   "main": "src/index.js",
   "bin": {
     "termjira": "./cli.js"
