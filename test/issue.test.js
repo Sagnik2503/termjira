@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Point the store at a throwaway directory before issue.js resolves its path.
 const store_dir = mkdtempSync(join(tmpdir(), "termjira-test-"));
+const result_dir = mkdtempSync(join(tmpdir(), "termjira-results-"));
 process.env.TERMJIRA_HOME = store_dir;
 
 const { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, update_status, update_priority, issue_not_found } = await import("../src/issue.js");
 
-afterAll(() => rmSync(store_dir, { recursive: true, force: true }));
+afterAll(() => {
+    rmSync(store_dir, { recursive: true, force: true });
+    rmSync(result_dir, { recursive: true, force: true });
+});
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -42,6 +46,155 @@ describe("store location", () => {
             expect(stored).toEqual([
                 expect.objectContaining({ title: "Home default" }),
             ]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
+
+let result_seq = 0;
+
+// Runs the store in a child process so a failed load cannot leak into other tests.
+function run_store_script(home, body) {
+    const result_path = join(result_dir, `result-${result_seq++}.json`);
+    const script = `
+        const __path = ${JSON.stringify(result_path)};
+        try {
+            const __result = (() => { ${body} })();
+            require("node:fs").writeFileSync(__path, JSON.stringify(__result ?? null));
+        } catch (error) {
+            require("node:fs").writeFileSync(__path, JSON.stringify({ __error: String(error && error.stack || error) }));
+            process.exitCode = 1;
+        }
+    `;
+    execFileSync(process.execPath, ["-e", script], {
+        cwd: process.cwd(),
+        env: { ...process.env, TERMJIRA_HOME: home },
+        encoding: "utf8",
+    });
+    return JSON.parse(readFileSync(result_path, "utf8"));
+}
+
+describe("store hardening", () => {
+    it("reads a missing store as an empty list", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-missing-"));
+
+        try {
+            expect(run_store_script(home, `
+                const { count_issues } = require("./src/issue");
+                return { count: count_issues() };
+            `)).toEqual({ count: 0 });
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("preserves a corrupt store, backs it up, and refuses to overwrite it", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-corrupt-"));
+        const store_path = join(home, "issue_store.json");
+        const corrupt = "{ this is not json";
+
+        try {
+            writeFileSync(store_path, corrupt);
+
+            const result = run_store_script(home, `
+                const { count_issues, create_issue } = require("./src/issue");
+                return {
+                    count: count_issues(),
+                    created: create_issue("Should not save", "Corrupt store") ?? null,
+                };
+            `);
+
+            expect(result.count).toBe(0);
+            expect(result.created).toBeNull();
+            expect(readFileSync(store_path, "utf8")).toBe(corrupt);
+
+            const backups = readdirSync(home).filter(name => name.endsWith(".bak"));
+            expect(backups).toHaveLength(1);
+            expect(readFileSync(join(home, backups[0]), "utf8")).toBe(corrupt);
+            expect(readdirSync(home).filter(name => name.endsWith(".tmp"))).toEqual([]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("reports a failed save from every mutator and leaves the store unchanged", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-readonly-"));
+        const store_path = join(home, "issue_store.json");
+        const seed = [{
+            id: 1,
+            title: "Seed",
+            description: "Seed issue",
+            status: "TODO",
+            priority: "MEDIUM",
+            labels: ["old"],
+            comments: [{ id: 1, text: "hello" }],
+            created_timestamp: 1,
+            updated_timestamp: 1,
+        }];
+
+        try {
+            writeFileSync(store_path, JSON.stringify(seed, null, 2));
+
+            const result = run_store_script(home, `
+                const fs = require("node:fs");
+                const { create_issue, edit_title, edit_description, update_status,
+                    update_priority, add_labels, remove_labels, delete_issue,
+                    add_comments, delete_comment } = require("./src/issue");
+                fs.chmodSync(${JSON.stringify(home)}, 0o555);
+                try {
+                    return {
+                        create_issue: create_issue("New", "New issue") ?? null,
+                        edit_title: edit_title(1, "New title") ?? null,
+                        edit_description: edit_description(1, "New description") ?? null,
+                        update_status: update_status(1, "CLOSED") ?? null,
+                        update_priority: update_priority(1, "HIGH") ?? null,
+                        add_labels: add_labels(1, ["new"]) ?? null,
+                        remove_labels: remove_labels(1, ["old"]) ?? null,
+                        delete_issue: delete_issue(1) ?? null,
+                        add_comments: add_comments(1, "new comment") ?? null,
+                        delete_comment: delete_comment(1, 1) ?? null,
+                    };
+                } finally {
+                    fs.chmodSync(${JSON.stringify(home)}, 0o755);
+                }
+            `);
+
+            for (const value of Object.values(result)) expect(value).toBeNull();
+            expect(JSON.parse(readFileSync(store_path, "utf8"))).toEqual(seed);
+        } finally {
+            chmodSync(home, 0o755);
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("leaves a valid store and no temp file after a successful save", () => {
+        const issue = create_issue("Atomic save", "Successful write");
+
+        try {
+            expect(get_issue(issue.id)).toMatchObject({ title: "Atomic save" });
+            expect(JSON.parse(readFileSync(join(store_dir, "issue_store.json"), "utf8")))
+                .toEqual(expect.arrayContaining([expect.objectContaining({ id: issue.id })]));
+            expect(readdirSync(store_dir).filter(name => name.endsWith(".tmp"))).toEqual([]);
+        } finally {
+            delete_issue(issue.id);
+        }
+    });
+
+    it("prints a friendly error when the store directory cannot be created", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-blocked-"));
+        const blocker = join(home, "not-a-directory");
+
+        try {
+            writeFileSync(blocker, "");
+
+            const output = execFileSync(process.execPath, ["-e", "require('./src/issue').count_issues()"], {
+                cwd: process.cwd(),
+                env: { ...process.env, TERMJIRA_HOME: join(blocker, "store") },
+                encoding: "utf8",
+            });
+
+            expect(output).toContain("Could not create the issue store");
         } finally {
             rmSync(home, { recursive: true, force: true });
         }
