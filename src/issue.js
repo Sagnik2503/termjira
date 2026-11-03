@@ -1,4 +1,4 @@
-const { readFileSync, writeFileSync, mkdirSync } = require('node:fs')
+const { copyFileSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } = require('node:fs')
 const { color_label, log_error, log_warn, log_success } = require('./colors')
 const { format_issue, format_row, format_list } = require('./format')
 const os = require('node:os')
@@ -7,7 +7,14 @@ const path = require('node:path')
 const STORE_DIR = process.env.TERMJIRA_HOME || path.join(os.homedir(), '.termjira')
 const STORE_PATH = path.join(STORE_DIR, 'issue_store.json')
 
-mkdirSync(STORE_DIR, { recursive: true })
+let failed_load = false
+
+try {
+    mkdirSync(STORE_DIR, { recursive: true })
+} catch (error) {
+    failed_load = true
+    log_error(`Could not create the issue store at ${STORE_DIR}: ${error.message}. Check that the folder is writable.`)
+}
 
 class Issue {
     constructor(id, title, description, status, priority, labels) {
@@ -52,26 +59,50 @@ function normalize_comments(comments = []) {
     )
 }
 
-function read_issues() {
+function preserve_broken_store(reason) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+    const backup_path = `${STORE_PATH}.${stamp}.bak`
+    failed_load = true
     try {
-        const data = JSON.parse(readFileSync(STORE_PATH, "utf8"))
-        if (!Array.isArray(data)) {
-            log_error("Issue store is not a list, starting empty.")
-            return []
-        }
-        for (const issue of data) issue.comments = normalize_comments(issue.comments)
-        return data
+        copyFileSync(STORE_PATH, backup_path)
+        log_error(`Could not load issues: ${reason}. Kept a copy at ${backup_path}. Refusing to write until it is fixed.`)
     } catch (error) {
-        if (error.code !== "ENOENT") log_error(`Could not load issues: ${error.message}`)
-        return []
+        log_error(`Could not load issues: ${reason}. Could not back it up: ${error.message}. Refusing to write until it is fixed.`)
     }
 }
 
-function write_issues(issues) {
+function read_issues() {
+    if (failed_load) return []
+    let data
     try {
-        writeFileSync(STORE_PATH, JSON.stringify(issues, null, 2), "utf8")
+        data = JSON.parse(readFileSync(STORE_PATH, "utf8"))
+    } catch (error) {
+        if (error.code === "ENOENT") return []
+        preserve_broken_store(error.message)
+        return []
+    }
+    if (!Array.isArray(data)) {
+        preserve_broken_store("Issue store is not a list")
+        return []
+    }
+    for (const issue of data) issue.comments = normalize_comments(issue.comments)
+    return data
+}
+
+function write_issues(issues) {
+    if (failed_load) {
+        log_error("Refusing to save issues: the issue store failed to load. Fix or remove the backup first.")
+        return false
+    }
+    const temp_path = `${STORE_PATH}.${process.pid}.${Date.now()}.tmp`
+    try {
+        writeFileSync(temp_path, JSON.stringify(issues, null, 2), "utf8")
+        renameSync(temp_path, STORE_PATH)
+        return true
     } catch (error) {
         log_error(`Could not save issues: ${error.message}`)
+        try { unlinkSync(temp_path) } catch {}
+        return false
     }
 }
 
@@ -105,7 +136,7 @@ function create_issue(title, description, status = "TODO", priority = "MEDIUM", 
     const issues = read_issues()
     const issue = new Issue(next_id(issues), title, description, status, priority, normalize_labels(labels))
     issues.push(issue)
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return issue
 }
 
@@ -141,7 +172,7 @@ function edit_title(id, title) {
     }
     issue.title = title
     issue.updated_timestamp = Date.now()
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return issue
 }
 
@@ -159,7 +190,7 @@ function edit_description(id, description) {
     }
     issue.description = description
     issue.updated_timestamp = Date.now()
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return issue
 }
 
@@ -176,7 +207,7 @@ function update_status(id, new_status) {
     }
     issue.status = new_status
     issue.updated_timestamp = Date.now()
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return issue
 }
 
@@ -194,8 +225,15 @@ function update_priority(id, new_priority) {
     }
     issue.priority = priority
     issue.updated_timestamp = Date.now()
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return issue
+}
+
+function publish_label_events(events) {
+    for (const [kind, message] of events) {
+        if (kind === "warn") log_warn(message)
+        else log_success(message)
+    }
 }
 
 function add_labels(id, labels) {
@@ -205,20 +243,21 @@ function add_labels(id, labels) {
         issue_not_found(id)
         return
     }
-    let changed = false
+    const events = []
     for (const label of normalize_labels(labels)) {
         if (issue.labels.includes(label)) {
-            log_warn(`Issue #${issue.id} already has label "${label}".`)
+            events.push(["warn", `Issue #${issue.id} already has label "${label}".`])
             continue
         }
         issue.labels.push(label)
-        log_success(`Added "${label}" to issue #${issue.id}.`)
-        changed = true
+        events.push(["success", `Added "${label}" to issue #${issue.id}.`])
     }
+    const changed = events.some(([kind]) => kind === "success")
     if (changed) {
         issue.updated_timestamp = Date.now()
-        write_issues(issues)
+        if (!write_issues(issues)) return
     }
+    publish_label_events(events)
     return issue
 }
 
@@ -229,21 +268,22 @@ function remove_labels(id, labels) {
         issue_not_found(id)
         return
     }
-    let changed = false
+    const events = []
     for (const label of normalize_labels(labels)) {
         const index = issue.labels.indexOf(label)
         if (index === -1) {
-            log_warn(`Issue #${issue.id} does not have label "${label}".`)
+            events.push(["warn", `Issue #${issue.id} does not have label "${label}".`])
             continue
         }
         issue.labels.splice(index, 1)
-        log_success(`Removed "${label}" from issue #${issue.id}.`)
-        changed = true
+        events.push(["success", `Removed "${label}" from issue #${issue.id}.`])
     }
+    const changed = events.some(([kind]) => kind === "success")
     if (changed) {
         issue.updated_timestamp = Date.now()
-        write_issues(issues)
+        if (!write_issues(issues)) return
     }
+    publish_label_events(events)
     return issue
 }
 
@@ -280,7 +320,7 @@ function delete_issue(id) {
         return
     }
     const [issue] = issues.splice(index, 1)
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return issue
 }
 
@@ -346,7 +386,7 @@ function add_comments(id, comment){
     }
     target_issue.comments.push({ id: target_issue.comments.reduce((max, c) => Math.max(max, c.id), 0) + 1, text })
     target_issue.updated_timestamp = Date.now()
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return target_issue
 }
 
@@ -364,7 +404,7 @@ function delete_comment(issueId, commentId){
     }
     const [removed]=target_issue.comments.splice(index, 1)
     target_issue.updated_timestamp = Date.now()
-    write_issues(issues)
+    if (!write_issues(issues)) return
     return removed
 }
 
