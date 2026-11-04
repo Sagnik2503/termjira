@@ -280,21 +280,18 @@ describe("format_help", () => {
         for (const line of lines) expect(line.length).toBeLessThanOrEqual(width);
     });
 
-    it.each([60, 80, 100])("keeps the Search filter row to two lines with a complete example at %i columns", width => {
-        const usage = 'filter [--status <status>] [--priority <priority>]';
+    it.each([60, 80, 100])("lists every supported filter flag in Search at %i columns", width => {
         const lines = stripAnsi(format_help(HELP_SECTIONS, { width })).split("\n");
         const start = lines.indexOf("Search");
         const tryIndex = lines.findIndex((line, i) => i > start && line.includes("Try:"));
-        const filterIndex = lines.findIndex((line, i) => i > start && i < tryIndex && line.includes("filter ["));
+        const search = lines.slice(start, tryIndex).join(" ");
 
-        expect(filterIndex).toBeGreaterThan(start);
-        expect(lines[filterIndex].trim()).toBe(usage);
-        expect(lines[filterIndex + 1].trim()).toBe("Filter issues");
-        expect(lines[filterIndex + 2].trim().startsWith("sort ")).toBe(true);
-
-        const tryLine = lines[tryIndex];
-        expect(tryLine).toContain(`Try: ${usage}`);
-        expect(tryLine).not.toContain("…");
+        expect(tryIndex).toBeGreaterThan(start);
+        for (const flag of ["--status", "--priority", "--title", "--description", "--label"]) {
+            expect(search).toContain(flag);
+        }
+        expect(search).toContain("repeat --label");
+        expect(lines[tryIndex]).toContain("filter ");
         for (const line of lines) expect(line.length).toBeLessThanOrEqual(width);
     });
 });

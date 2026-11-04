@@ -23,7 +23,7 @@ const HELP_SECTIONS = [
         ["comment delete <id> <commentId>", "Delete a comment from an issue"],
     ]],
     ["Search", [
-        ["filter [--status <status>] [--priority <priority>]", "Filter issues"],
+        ['filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]', "Filter issues; repeat --label to require every label"],
         ["sort [--by id|priority|status|created] [--order asc|desc]", "Sort issues"],
     ]],
 ]
