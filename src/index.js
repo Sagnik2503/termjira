@@ -45,10 +45,6 @@ function ask(question) {
     })
 }
 
-function confirm(question) {
-    return ask(question)
-}
-
 async function askField(name, values, fallback) {
     while (true) {
         const answer = await ask(`${theme.bold(name)} ${theme.muted(`(${values.join(', ')})`)} [${theme.accent(fallback)}]: `)
@@ -118,7 +114,7 @@ const commands = {
             return
         }
         if (!force) {
-            const answer = String(await confirm(`Delete issue #${issue.id} "${issue.title}"? (y/N) `)).trim().toLowerCase()
+            const answer = String(await ask(`Delete issue #${issue.id} "${issue.title}"? (y/N) `)).trim().toLowerCase()
             if (answer !== "y" && answer !== "yes") {
                 log_warn("Delete cancelled.")
                 return
