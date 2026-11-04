@@ -9,35 +9,41 @@ A command-line issue tracking tool inspired by Jira, built with JavaScript and N
 - View individual issue details.
 - Update issue status and priority.
 - Add, remove, list, and filter by labels.
+- Filter by status, priority, title, description, and labels.
+- Sort by ID, priority, status, or creation time.
+- Add and delete comments.
 - Track issues through a simple workflow: `TODO`, `IN_PROGRESS`, and `CLOSED`.
 
 ## Tech Stack
 
 - JavaScript
-- Node.js
-- Node.js built-in modules
+- Node.js 18 or later
+- [picocolors](https://www.npmjs.com/package/picocolors) for terminal colors
+- Node.js built-in modules (`fs`, `os`, `path`, `readline`)
 
-## Getting Started
+## Installation
 
-### Prerequisites
+Install the published package globally:
 
-- [Node.js](https://nodejs.org/) installed on your machine.
+```bash
+npm install -g termjira
+```
 
-### Run the project
+Then run it from anywhere:
 
-1. Clone the repository.
-2. Navigate to the project directory.
-3. Install the `termjira` command globally:
+```bash
+termjira
+```
 
-   ```bash
-   npm install -g .
-   ```
+## Store
 
-4. Run it from anywhere:
+TermJira keeps issues in `~/.termjira/issue_store.json`. To use a different location, set `TERMJIRA_HOME` to the directory that should hold the Store:
 
-   ```bash
-   termjira
-   ```
+```bash
+TERMJIRA_HOME=/path/to/data termjira
+```
+
+TermJira supports single-instance use. There is no cross-process locking, so do not run two sessions against the same Store at once; concurrent edits may be lost.
 
 ## Commands
 
@@ -54,18 +60,12 @@ A command-line issue tracking tool inspired by Jira, built with JavaScript and N
 | `label remove <id> <label>[,<label>...]` | Remove labels from an issue |
 | `comment add <id> "<text>"` | Add a comment to an issue (text must be quoted) |
 | `comment delete <id> <commentId>` | Delete a comment from an issue |
-| `filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]` | Filter issues; repeat `--label` to require every label |
+| `filter [--status <status>] [--priority <priority>] [--title "<text>"] [--description "<text>"] [--label <label>]` | Filter issues; title and description values must be quoted, and repeat `--label` to require every label |
 | `sort [--by id\|priority\|status\|created] [--order asc\|desc]` | Sort issues; defaults to `id` ascending |
 | `exit` | Exit TermJira |
 
-*Commands are being implemented incrementally; availability depends on the current development stage.*
+Status values are `TODO`, `IN_PROGRESS`, and `CLOSED`. Priority values are `LOW`, `MEDIUM`, and `HIGH`.
 
-## Project Goal
+## License
 
-Build a practical, Jira-inspired issue tracker while learning JavaScript and Node.js through hands-on development.
-
-The project will evolve from a basic CLI into a more complete issue tracking system, with persistent storage, projects, sprints, and potential AI-powered features in later stages.
-
-## Status
-
-🚧 Under active development.
+ISC. See [LICENSE](LICENSE).
