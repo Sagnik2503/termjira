@@ -4,7 +4,7 @@
   "description": "A minimal, terminal-based Jira clone.",
   "main": "src/index.js",
   "bin": {
-    "termjira": "./cli.js"
+    "termjira": "cli.js"
   },
   "files": [
     "cli.js",
