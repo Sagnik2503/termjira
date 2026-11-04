@@ -1,9 +1,38 @@
 const { theme } = require('./theme')
 
-const ANSI = /\x1b\[[0-9;]*m/g
+const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
 const ANSI_TOKEN = /(\x1b\[[0-9;?]*[ -/]*[@-~])/
+const ESCAPE_SEQUENCE = /\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[P^_X][\s\S]*?\x1b\\|[\x20-\x2f][\x30-\x7e]|[\x40-\x5f])/g
+const ZERO_WIDTH = /[\p{Mark}\p{Control}\p{Format}]/u
+const WIDE = /[\u1100-\u115f\u2329\u232a\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/u
+const EMOJI_PRESENTATION = /\p{Emoji_Presentation}/u
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
-const visible_length = text => String(text).replace(ANSI, '').length
+const graphemes = text => Array.from(segmenter.segment(text), part => part.segment)
+
+function code_point_width(code_point) {
+    const char = String.fromCodePoint(code_point)
+    if (ZERO_WIDTH.test(char)) return 0
+    if (WIDE.test(char) || EMOJI_PRESENTATION.test(char)) return 2
+    return 1
+}
+
+function grapheme_width(grapheme) {
+    if (grapheme.includes('\uFE0F')) return 2
+    let width = 0
+    for (const char of grapheme) width = Math.max(width, code_point_width(char.codePointAt(0)))
+    return width
+}
+
+const visible_length = text => {
+    let width = 0
+    for (const grapheme of graphemes(String(text).replace(ANSI, ''))) width += grapheme_width(grapheme)
+    return width
+}
+
+const strip_control = text => String(text ?? '')
+    .replace(ESCAPE_SEQUENCE, '')
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, char => (char === '\n' || char === '\t' ? ' ' : ''))
 
 const pad = (text, width) => text + ' '.repeat(Math.max(0, width - visible_length(text)))
 
@@ -20,9 +49,15 @@ function truncate(text, width) {
             if (visible < limit) out += token
             continue
         }
-        const take = Math.min(token.length, limit - visible)
-        out += token.slice(0, take)
-        visible += take
+        for (const grapheme of graphemes(token)) {
+            const size = grapheme_width(grapheme)
+            if (visible + size > limit) {
+                visible = limit
+                break
+            }
+            out += grapheme
+            visible += size
+        }
         if (visible >= limit) break
     }
     out += '…'
@@ -57,21 +92,41 @@ function wrap(text, width) {
     const cols = Math.max(1, Math.floor(width))
     const lines = []
     let line = ''
+    let line_width = 0
     for (const word of String(text ?? '').split(/\s+/).filter(Boolean)) {
-        let rest = word
-        if (line && line.length + 1 + rest.length <= cols) {
-            line += ` ${rest}`
+        const word_width = visible_length(word)
+        if (line && line_width + 1 + word_width <= cols) {
+            line += ` ${word}`
+            line_width += 1 + word_width
             continue
         }
         if (line) {
             lines.push(line)
             line = ''
+            line_width = 0
         }
-        while (rest.length > cols) {
-            lines.push(rest.slice(0, cols))
-            rest = rest.slice(cols)
+        let rest = word
+        while (visible_length(rest) > cols) {
+            const rest_graphemes = graphemes(rest)
+            let chunk = ''
+            let chunk_width = 0
+            let taken = 0
+            for (const grapheme of rest_graphemes) {
+                const size = grapheme_width(grapheme)
+                if (chunk_width + size > cols) break
+                chunk += grapheme
+                chunk_width += size
+                taken += 1
+            }
+            if (!chunk) {
+                chunk = rest_graphemes[0]
+                taken = 1
+            }
+            lines.push(chunk)
+            rest = rest_graphemes.slice(taken).join('')
         }
         line = rest
+        line_width = visible_length(rest)
     }
     if (line || lines.length === 0) lines.push(line)
     return lines
@@ -108,10 +163,10 @@ function format_row(issue, { width, now = Date.now() } = {}) {
         theme.muted(pad(truncate(`#${issue.id}`, LIST_COLUMNS.id), LIST_COLUMNS.id)),
         pad(truncate(theme.priority(issue.priority), LIST_COLUMNS.priority), LIST_COLUMNS.priority),
         pad(truncate(theme.status(issue.status), LIST_COLUMNS.status), LIST_COLUMNS.status),
-        pad(truncate(issue.title, layout.title), layout.title),
+        pad(truncate(strip_control(issue.title), layout.title), layout.title),
     ]
     if (layout.showLabels) {
-        const labels = issue.labels?.length ? issue.labels.join(', ') : '—'
+        const labels = issue.labels?.length ? strip_control(issue.labels.join(', ')) : '—'
         cells.push(pad(theme.muted(truncate(labels, LIST_COLUMNS.labels)), LIST_COLUMNS.labels))
     }
     if (layout.showUpdated) {
@@ -123,7 +178,7 @@ function format_row(issue, { width, now = Date.now() } = {}) {
 function format_list(issues, { width, now = Date.now(), context } = {}) {
     const layout = list_layout(width)
     return [
-        theme.bold(truncate(context ?? `Issues · ${issues.length}`, layout.cols)),
+        theme.bold(truncate(strip_control(context ?? `Issues · ${issues.length}`), layout.cols)),
         theme.rule(layout.cols),
         format_list_header(layout),
         ...issues.map(issue => format_row(issue, { width: layout.cols, now })),
@@ -136,7 +191,7 @@ function format_comments(comments, { width } = {}) {
     const lines = [theme.bold(`Comments (${comments.length})`), theme.rule(cols)]
     for (const comment of comments) {
         const prefix = `#${comment.id} `
-        const wrapped = wrap(comment.text, Math.max(10, cols - prefix.length))
+        const wrapped = wrap(strip_control(comment.text), Math.max(10, cols - visible_length(prefix)))
         lines.push(`${theme.muted(`#${comment.id}`)} ${wrapped[0]}`)
         for (const extra of wrapped.slice(1)) lines.push(`${' '.repeat(prefix.length)}${extra}`)
         lines.push('')
@@ -150,16 +205,16 @@ function format_issue(issue, { width, now = Date.now() } = {}) {
     const content = text => `${theme.muted('│')} ${pad(truncate(text, inner), inner)} ${theme.muted('│')}`
     const field = (label, value) => content(`${theme.muted(label.padEnd(CARD_LABEL_WIDTH))}${value}`)
     const heading = `#${issue.id}`
-    const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - heading.length - 5))}╮`)}`
+    const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - visible_length(heading) - 5))}╮`)}`
     const bottom = theme.muted(`╰${'─'.repeat(Math.max(0, cols - 2))}╯`)
-    const plainLabels = issue.labels?.length ? issue.labels.join(', ') : '—'
+    const plainLabels = issue.labels?.length ? strip_control(issue.labels.join(', ')) : '—'
     const labels = theme.muted(truncate(plainLabels, inner - CARD_LABEL_WIDTH))
     const updated = issue.updated_timestamp ?? issue.created_timestamp
 
     const lines = [top]
-    for (const line of wrap(issue.title, inner)) lines.push(content(theme.bold(line)))
+    for (const line of wrap(strip_control(issue.title), inner)) lines.push(content(theme.bold(line)))
     lines.push(content(''))
-    for (const line of wrap(issue.description || '—', inner)) lines.push(content(line))
+    for (const line of wrap(strip_control(issue.description || '—'), inner)) lines.push(content(line))
     lines.push(content(''))
     lines.push(field('Status', theme.status(issue.status)))
     lines.push(field('Priority', theme.priority(issue.priority)))
@@ -177,14 +232,14 @@ const HELP_USAGE_MAX = 40
 
 function format_help(sections, { width } = {}) {
     const cols = resolve_width(width)
-    const longest = Math.max(0, ...sections.flatMap(([, rows]) => rows.map(([usage]) => usage.length)))
+    const longest = Math.max(0, ...sections.flatMap(([, rows]) => rows.map(([usage]) => visible_length(usage))))
     const usageWidth = Math.max(1, Math.min(cols - 30, HELP_USAGE_MAX, longest))
     const out = []
     for (const [title, rows] of sections) {
         out.push(theme.bold(title))
         out.push(theme.rule(cols))
         for (const [usage, description] of rows) {
-            if (usage.length > usageWidth) {
+            if (visible_length(usage) > usageWidth) {
                 for (const line of wrap(usage, Math.max(10, cols - 2))) out.push(`  ${theme.accent(line)}`)
                 for (const line of wrap(description, Math.max(10, cols - 4))) out.push(`    ${theme.muted(line)}`)
             } else {
@@ -200,4 +255,4 @@ function format_help(sections, { width } = {}) {
     return out.join('\n').trimEnd()
 }
 
-module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list, format_issue, format_comments, format_help }
+module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, strip_control, format_row, format_list, format_issue, format_comments, format_help }

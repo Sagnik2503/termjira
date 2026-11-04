@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Point the store at a throwaway directory before issue.js resolves its path.
 const store_dir = mkdtempSync(join(tmpdir(), "termjira-test-"));
+const result_dir = mkdtempSync(join(tmpdir(), "termjira-results-"));
 process.env.TERMJIRA_HOME = store_dir;
 
-const { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, update_status, update_priority, issue_not_found } = await import("../src/issue.js");
+const { create_issue, format_issue, format_row, sort_issues, add_comments, delete_comment, get_issue, delete_issue, show_issue, add_labels, remove_labels, edit_title, edit_description, update_status, update_priority, issue_not_found } = await import("../src/issue.js");
 
-afterAll(() => rmSync(store_dir, { recursive: true, force: true }));
+afterAll(() => {
+    rmSync(store_dir, { recursive: true, force: true });
+    rmSync(result_dir, { recursive: true, force: true });
+});
 
 const stripAnsi = text => text.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -48,6 +52,247 @@ describe("store location", () => {
     });
 });
 
+let result_seq = 0;
+
+// Runs the store in a child process so a failed load cannot leak into other tests.
+function run_store_script(home, body) {
+    const result_path = join(result_dir, `result-${result_seq++}.json`);
+    const script = `
+        const __path = ${JSON.stringify(result_path)};
+        try {
+            const __result = (() => { ${body} })();
+            require("node:fs").writeFileSync(__path, JSON.stringify(__result ?? null));
+        } catch (error) {
+            require("node:fs").writeFileSync(__path, JSON.stringify({ __error: String(error && error.stack || error) }));
+            process.exitCode = 1;
+        }
+    `;
+    execFileSync(process.execPath, ["-e", script], {
+        cwd: process.cwd(),
+        env: { ...process.env, TERMJIRA_HOME: home },
+        encoding: "utf8",
+    });
+    return JSON.parse(readFileSync(result_path, "utf8"));
+}
+
+describe("store hardening", () => {
+    it("reads a missing store as an empty list", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-missing-"));
+
+        try {
+            expect(run_store_script(home, `
+                const { count_issues } = require("./src/issue");
+                return { count: count_issues() };
+            `)).toEqual({ count: 0 });
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("preserves a corrupt store, backs it up, and refuses to overwrite it", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-corrupt-"));
+        const store_path = join(home, "issue_store.json");
+        const corrupt = "{ this is not json";
+
+        try {
+            writeFileSync(store_path, corrupt);
+
+            const result = run_store_script(home, `
+                const { count_issues, create_issue } = require("./src/issue");
+                return {
+                    count: count_issues(),
+                    created: create_issue("Should not save", "Corrupt store") ?? null,
+                };
+            `);
+
+            expect(result.count).toBe(0);
+            expect(result.created).toBeNull();
+            expect(readFileSync(store_path, "utf8")).toBe(corrupt);
+
+            const backups = readdirSync(home).filter(name => name.endsWith(".bak"));
+            expect(backups).toHaveLength(1);
+            expect(readFileSync(join(home, backups[0]), "utf8")).toBe(corrupt);
+            expect(readdirSync(home).filter(name => name.endsWith(".tmp"))).toEqual([]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("reports a failed save from every mutator and leaves the store unchanged", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-readonly-"));
+        const store_path = join(home, "issue_store.json");
+        const seed = [{
+            id: 1,
+            title: "Seed",
+            description: "Seed issue",
+            status: "TODO",
+            priority: "MEDIUM",
+            labels: ["old"],
+            comments: [{ id: 1, text: "hello" }],
+            created_timestamp: 1,
+            updated_timestamp: 1,
+        }];
+
+        try {
+            writeFileSync(store_path, JSON.stringify(seed, null, 2));
+
+            const result = run_store_script(home, `
+                const fs = require("node:fs");
+                const { create_issue, edit_title, edit_description, update_status,
+                    update_priority, add_labels, remove_labels, delete_issue,
+                    add_comments, delete_comment } = require("./src/issue");
+                fs.chmodSync(${JSON.stringify(home)}, 0o555);
+                try {
+                    return {
+                        create_issue: create_issue("New", "New issue") ?? null,
+                        edit_title: edit_title(1, "New title") ?? null,
+                        edit_description: edit_description(1, "New description") ?? null,
+                        update_status: update_status(1, "CLOSED") ?? null,
+                        update_priority: update_priority(1, "HIGH") ?? null,
+                        add_labels: add_labels(1, ["new"]) ?? null,
+                        remove_labels: remove_labels(1, ["old"]) ?? null,
+                        delete_issue: delete_issue(1) ?? null,
+                        add_comments: add_comments(1, "new comment") ?? null,
+                        delete_comment: delete_comment(1, 1) ?? null,
+                    };
+                } finally {
+                    fs.chmodSync(${JSON.stringify(home)}, 0o755);
+                }
+            `);
+
+            for (const value of Object.values(result)) expect(value).toBeNull();
+            expect(JSON.parse(readFileSync(store_path, "utf8"))).toEqual(seed);
+        } finally {
+            chmodSync(home, 0o755);
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("leaves a valid store and no temp file after a successful save", () => {
+        const issue = create_issue("Atomic save", "Successful write");
+
+        try {
+            expect(get_issue(issue.id)).toMatchObject({ title: "Atomic save" });
+            expect(JSON.parse(readFileSync(join(store_dir, "issue_store.json"), "utf8")))
+                .toEqual(expect.arrayContaining([expect.objectContaining({ id: issue.id })]));
+            expect(readdirSync(store_dir).filter(name => name.endsWith(".tmp"))).toEqual([]);
+        } finally {
+            delete_issue(issue.id);
+        }
+    });
+
+    it("backs up a store with non-object entries and refuses to overwrite it", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-null-entry-"));
+        const store_path = join(home, "issue_store.json");
+        const malformed = JSON.stringify([null]);
+
+        try {
+            writeFileSync(store_path, malformed);
+
+            const result = run_store_script(home, `
+                const { count_issues, create_issue } = require("./src/issue");
+                return {
+                    count: count_issues(),
+                    created: create_issue("Should not save", "Malformed store") ?? null,
+                };
+            `);
+
+            expect(result.count).toBe(0);
+            expect(result.created).toBeNull();
+            expect(readFileSync(store_path, "utf8")).toBe(malformed);
+
+            const backups = readdirSync(home).filter(name => name.endsWith(".bak"));
+            expect(backups).toHaveLength(1);
+            expect(readFileSync(join(home, backups[0]), "utf8")).toBe(malformed);
+            expect(readdirSync(home).filter(name => name.endsWith(".tmp"))).toEqual([]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("loads issues with non-array labels and comments without throwing", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-odd-shape-"));
+        const store_path = join(home, "issue_store.json");
+        const seed = [
+            {
+                id: 1,
+                title: "Odd shapes",
+                description: "Labels and comments are not arrays",
+                status: "TODO",
+                priority: "MEDIUM",
+                labels: "bug",
+                comments: "hello",
+                created_timestamp: 1,
+                updated_timestamp: 1,
+            },
+            {
+                id: 2,
+                title: "Odd entries",
+                description: "Comments contain non-objects",
+                status: "TODO",
+                priority: "LOW",
+                labels: null,
+                comments: [null, 42, { id: 3, text: "real" }],
+                created_timestamp: 2,
+                updated_timestamp: 2,
+            },
+        ];
+
+        try {
+            writeFileSync(store_path, JSON.stringify(seed, null, 2));
+
+            const result = run_store_script(home, `
+                const { count_issues, get_issue, format_issue, format_row, list_issues } = require("./src/issue");
+                const odd_shapes = get_issue(1);
+                const odd_entries = get_issue(2);
+                list_issues();
+                return {
+                    count: count_issues(),
+                    labels: odd_shapes.labels,
+                    comments: odd_shapes.comments,
+                    entry_comments: odd_entries.comments,
+                    rendered: format_issue(odd_shapes),
+                    row: format_row(odd_shapes),
+                };
+            `);
+
+            expect(result.count).toBe(2);
+            expect(result.labels).toEqual([]);
+            expect(result.comments).toEqual([]);
+            expect(result.entry_comments).toEqual([
+                { id: 1, text: "" },
+                { id: 2, text: "" },
+                { id: 3, text: "real" },
+            ]);
+            expect(result.rendered).toContain("Odd shapes");
+            expect(result.row).toContain("Odd shapes");
+            expect(readFileSync(store_path, "utf8")).toBe(JSON.stringify(seed, null, 2));
+            expect(readdirSync(home).filter(name => name.endsWith(".bak"))).toEqual([]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("prints a friendly error when the store directory cannot be created", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-blocked-"));
+        const blocker = join(home, "not-a-directory");
+
+        try {
+            writeFileSync(blocker, "");
+
+            const output = execFileSync(process.execPath, ["-e", "require('./src/issue').count_issues()"], {
+                cwd: process.cwd(),
+                env: { ...process.env, TERMJIRA_HOME: join(blocker, "store") },
+                encoding: "utf8",
+            });
+
+            expect(output).toContain("Could not create the issue store");
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
+
 const MESSAGE_GLYPHS = { success: "✓", warning: "!", error: "✗" };
 const MISSING_ID = 987654321;
 const missing_copy = `✗ Issue #${MISSING_ID} not found. Try "list" to see valid IDs.`;
@@ -63,6 +308,102 @@ describe("create_issue", () => {
         expect(issue.status).toBe("TODO");
         expect(issue.priority).toBe("MEDIUM");
         expect(issue.labels).toEqual(["bug", "ui"]);
+    });
+});
+
+describe("update normalization", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("trims and uppercases status updates", () => {
+        const issue = create_issue("Normalize status", "Lowercase and padded status");
+
+        expect(update_status(issue.id, "  in_progress  ").status).toBe("IN_PROGRESS");
+        expect(get_issue(issue.id).status).toBe("IN_PROGRESS");
+
+        delete_issue(issue.id);
+    });
+
+    it("trims and uppercases priority updates", () => {
+        const issue = create_issue("Normalize priority", "Padded priority");
+
+        expect(update_priority(issue.id, "  high  ").priority).toBe("HIGH");
+        expect(get_issue(issue.id).priority).toBe("HIGH");
+
+        delete_issue(issue.id);
+    });
+
+    it("rejects an invalid status and priority", () => {
+        const issue = create_issue("Invalid update", "Unparseable values");
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        expect(update_status(issue.id, "nope")).toBeUndefined();
+        expect(update_priority(issue.id, "nope")).toBeUndefined();
+        expect(log).toHaveBeenCalled();
+
+        delete_issue(issue.id);
+    });
+});
+
+describe("control-safe storage", () => {
+    const store_path = () => join(store_dir, "issue_store.json");
+    const stored_issue = id => JSON.parse(readFileSync(store_path(), "utf8")).find(issue => issue.id === id);
+
+    it("strips escape codes from title, description and labels before persisting", () => {
+        const issue = create_issue(
+            "Fix\x1b[2J login",
+            "Broken\x1b]0;pwned\x07 session",
+            undefined,
+            undefined,
+            ["bug\x1b[31m", "ui"],
+        );
+
+        expect(stored_issue(issue.id)).toMatchObject({
+            title: "Fix login",
+            description: "Broken session",
+            labels: ["bug", "ui"],
+        });
+        expect(JSON.stringify(stored_issue(issue.id))).not.toMatch(/\x1b/);
+
+        delete_issue(issue.id);
+    });
+
+    it("strips escape codes from edits, labels and comments before persisting", () => {
+        const issue = create_issue("Control edits", "Issue for control tests");
+
+        edit_title(issue.id, "New\x1b[2J title");
+        edit_description(issue.id, "New\x1b]0;pwned\x07 description");
+        add_labels(issue.id, ["evil\x1b[31m"]);
+        add_comments(issue.id, "Comment\x1b[2J text");
+
+        expect(stored_issue(issue.id)).toMatchObject({
+            title: "New title",
+            description: "New description",
+            labels: ["evil"],
+            comments: [{ id: 1, text: "Comment text" }],
+        });
+        expect(JSON.stringify(stored_issue(issue.id))).not.toMatch(/\x1b/);
+
+        delete_issue(issue.id);
+    });
+
+    it("sanitizes text already in the store when rendering", () => {
+        const issue = create_issue("Render guard", "Issue for render guard");
+        const data = JSON.parse(readFileSync(store_path(), "utf8"));
+        const target = data.find(element => element.id === issue.id);
+        target.title = "bad\x1b[2Jtitle";
+        target.description = "bad\x1b]0;pwned\x07description";
+        target.labels = ["bug\x1b[31m"];
+        target.comments = [{ id: 1, text: "bad\x1b[2Jcomment" }];
+        writeFileSync(store_path(), JSON.stringify(data, null, 2));
+
+        const out = format_issue(get_issue(issue.id), { width: 100, now: 0 });
+
+        expect(out).not.toContain("\x1b[2J");
+        expect(out).not.toContain("\x1b]0;");
+        expect(out).toContain("badtitle");
+        expect(out).toContain("badcomment");
+
+        delete_issue(issue.id);
     });
 });
 
