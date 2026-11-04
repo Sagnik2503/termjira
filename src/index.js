@@ -40,7 +40,8 @@ function ask(question) {
             resolve(null)
             return
         }
-        process.stdout.write(question)
+        rl.setPrompt(question)
+        rl.prompt()
         waiting_for_line.push(resolve)
     })
 }
