@@ -1,5 +1,11 @@
 # TermJira
 
+```text
+╔╦╗ ╔═╗ ╦═╗ ╔╦╗  ╦  ╦  ╦═╗ ╔═╗
+ ║  ║╣  ╠╦╝ ║║║  ║  ║  ╠╦╝ ╠═╣
+ ╩  ╚═╝ ╩╚═ ╩ ╩ ╚═╝ ╩  ╩╚═ ╩ ╩
+```
+
 A command-line issue tracking tool inspired by Jira, built with JavaScript and Node.js.
 
 ## Features
