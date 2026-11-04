@@ -195,7 +195,8 @@ function edit_description(id, description) {
 }
 
 function update_status(id, new_status) {
-    if (!STATUSES.includes(new_status)) {
+    const status = String(new_status ?? "").trim().toUpperCase()
+    if (!STATUSES.includes(status)) {
         log_error(`New status name is incorrect. Choose between "IN_PROGRESS", "TODO", "CLOSED"`)
         return
     }
@@ -205,14 +206,14 @@ function update_status(id, new_status) {
         issue_not_found(id)
         return
     }
-    issue.status = new_status
+    issue.status = status
     issue.updated_timestamp = Date.now()
     if (!write_issues(issues)) return
     return issue
 }
 
 function update_priority(id, new_priority) {
-    const priority = String(new_priority ?? "").toUpperCase()
+    const priority = String(new_priority ?? "").trim().toUpperCase()
     if (!PRIORITIES.includes(priority)) {
         log_error(`Invalid priority. Choose between "LOW", "MEDIUM", "HIGH"`)
         return
