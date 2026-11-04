@@ -52,11 +52,11 @@ function normalize_labels(labels) {
 }
 
 function normalize_comments(comments = []) {
-    return comments.map((comment, index) =>
-        typeof comment === "string"
-            ? { id: index + 1, text: comment }
-            : { id: comment.id ?? index + 1, text: String(comment.text ?? "") }
-    )
+    return (Array.isArray(comments) ? comments : []).map((comment, index) => {
+        if (typeof comment === "string") return { id: index + 1, text: comment }
+        const entry = comment && typeof comment === "object" ? comment : {}
+        return { id: entry.id ?? index + 1, text: String(entry.text ?? "") }
+    })
 }
 
 function preserve_broken_store(reason) {
@@ -85,10 +85,14 @@ function read_issues() {
         preserve_broken_store("Issue store is not a list")
         return []
     }
+    if (data.some(issue => issue === null || typeof issue !== "object" || Array.isArray(issue))) {
+        preserve_broken_store("Issue store contains invalid entries")
+        return []
+    }
     for (const issue of data) {
         issue.title = strip_control(issue.title)
         issue.description = strip_control(issue.description)
-        if (Array.isArray(issue.labels)) issue.labels = issue.labels.map(strip_control)
+        issue.labels = Array.isArray(issue.labels) ? issue.labels.map(strip_control) : []
         issue.comments = normalize_comments(issue.comments)
             .map(comment => ({ ...comment, text: strip_control(comment.text) }))
     }

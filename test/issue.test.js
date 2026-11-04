@@ -181,6 +181,98 @@ describe("store hardening", () => {
         }
     });
 
+    it("backs up a store with non-object entries and refuses to overwrite it", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-null-entry-"));
+        const store_path = join(home, "issue_store.json");
+        const malformed = JSON.stringify([null]);
+
+        try {
+            writeFileSync(store_path, malformed);
+
+            const result = run_store_script(home, `
+                const { count_issues, create_issue } = require("./src/issue");
+                return {
+                    count: count_issues(),
+                    created: create_issue("Should not save", "Malformed store") ?? null,
+                };
+            `);
+
+            expect(result.count).toBe(0);
+            expect(result.created).toBeNull();
+            expect(readFileSync(store_path, "utf8")).toBe(malformed);
+
+            const backups = readdirSync(home).filter(name => name.endsWith(".bak"));
+            expect(backups).toHaveLength(1);
+            expect(readFileSync(join(home, backups[0]), "utf8")).toBe(malformed);
+            expect(readdirSync(home).filter(name => name.endsWith(".tmp"))).toEqual([]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("loads issues with non-array labels and comments without throwing", () => {
+        const home = mkdtempSync(join(tmpdir(), "termjira-odd-shape-"));
+        const store_path = join(home, "issue_store.json");
+        const seed = [
+            {
+                id: 1,
+                title: "Odd shapes",
+                description: "Labels and comments are not arrays",
+                status: "TODO",
+                priority: "MEDIUM",
+                labels: "bug",
+                comments: "hello",
+                created_timestamp: 1,
+                updated_timestamp: 1,
+            },
+            {
+                id: 2,
+                title: "Odd entries",
+                description: "Comments contain non-objects",
+                status: "TODO",
+                priority: "LOW",
+                labels: null,
+                comments: [null, 42, { id: 3, text: "real" }],
+                created_timestamp: 2,
+                updated_timestamp: 2,
+            },
+        ];
+
+        try {
+            writeFileSync(store_path, JSON.stringify(seed, null, 2));
+
+            const result = run_store_script(home, `
+                const { count_issues, get_issue, format_issue, format_row, list_issues } = require("./src/issue");
+                const odd_shapes = get_issue(1);
+                const odd_entries = get_issue(2);
+                list_issues();
+                return {
+                    count: count_issues(),
+                    labels: odd_shapes.labels,
+                    comments: odd_shapes.comments,
+                    entry_comments: odd_entries.comments,
+                    rendered: format_issue(odd_shapes),
+                    row: format_row(odd_shapes),
+                };
+            `);
+
+            expect(result.count).toBe(2);
+            expect(result.labels).toEqual([]);
+            expect(result.comments).toEqual([]);
+            expect(result.entry_comments).toEqual([
+                { id: 1, text: "" },
+                { id: 2, text: "" },
+                { id: 3, text: "real" },
+            ]);
+            expect(result.rendered).toContain("Odd shapes");
+            expect(result.row).toContain("Odd shapes");
+            expect(readFileSync(store_path, "utf8")).toBe(JSON.stringify(seed, null, 2));
+            expect(readdirSync(home).filter(name => name.endsWith(".bak"))).toEqual([]);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
     it("prints a friendly error when the store directory cannot be created", () => {
         const home = mkdtempSync(join(tmpdir(), "termjira-blocked-"));
         const blocker = join(home, "not-a-directory");

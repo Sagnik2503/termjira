@@ -34,8 +34,6 @@ const strip_control = text => String(text ?? '')
     .replace(ESCAPE_SEQUENCE, '')
     .replace(/[\x00-\x1f\x7f-\x9f]/g, char => (char === '\n' || char === '\t' ? ' ' : ''))
 
-const sanitize = strip_control
-
 const pad = (text, width) => text + ' '.repeat(Math.max(0, width - visible_length(text)))
 
 function truncate(text, width) {
@@ -165,10 +163,10 @@ function format_row(issue, { width, now = Date.now() } = {}) {
         theme.muted(pad(truncate(`#${issue.id}`, LIST_COLUMNS.id), LIST_COLUMNS.id)),
         pad(truncate(theme.priority(issue.priority), LIST_COLUMNS.priority), LIST_COLUMNS.priority),
         pad(truncate(theme.status(issue.status), LIST_COLUMNS.status), LIST_COLUMNS.status),
-        pad(truncate(sanitize(issue.title), layout.title), layout.title),
+        pad(truncate(strip_control(issue.title), layout.title), layout.title),
     ]
     if (layout.showLabels) {
-        const labels = issue.labels?.length ? sanitize(issue.labels.join(', ')) : '—'
+        const labels = issue.labels?.length ? strip_control(issue.labels.join(', ')) : '—'
         cells.push(pad(theme.muted(truncate(labels, LIST_COLUMNS.labels)), LIST_COLUMNS.labels))
     }
     if (layout.showUpdated) {
@@ -180,7 +178,7 @@ function format_row(issue, { width, now = Date.now() } = {}) {
 function format_list(issues, { width, now = Date.now(), context } = {}) {
     const layout = list_layout(width)
     return [
-        theme.bold(truncate(sanitize(context ?? `Issues · ${issues.length}`), layout.cols)),
+        theme.bold(truncate(strip_control(context ?? `Issues · ${issues.length}`), layout.cols)),
         theme.rule(layout.cols),
         format_list_header(layout),
         ...issues.map(issue => format_row(issue, { width: layout.cols, now })),
@@ -193,7 +191,7 @@ function format_comments(comments, { width } = {}) {
     const lines = [theme.bold(`Comments (${comments.length})`), theme.rule(cols)]
     for (const comment of comments) {
         const prefix = `#${comment.id} `
-        const wrapped = wrap(sanitize(comment.text), Math.max(10, cols - visible_length(prefix)))
+        const wrapped = wrap(strip_control(comment.text), Math.max(10, cols - visible_length(prefix)))
         lines.push(`${theme.muted(`#${comment.id}`)} ${wrapped[0]}`)
         for (const extra of wrapped.slice(1)) lines.push(`${' '.repeat(prefix.length)}${extra}`)
         lines.push('')
@@ -209,14 +207,14 @@ function format_issue(issue, { width, now = Date.now() } = {}) {
     const heading = `#${issue.id}`
     const top = `${theme.muted('╭─')} ${theme.bold(heading)} ${theme.muted(`${'─'.repeat(Math.max(0, cols - visible_length(heading) - 5))}╮`)}`
     const bottom = theme.muted(`╰${'─'.repeat(Math.max(0, cols - 2))}╯`)
-    const plainLabels = issue.labels?.length ? sanitize(issue.labels.join(', ')) : '—'
+    const plainLabels = issue.labels?.length ? strip_control(issue.labels.join(', ')) : '—'
     const labels = theme.muted(truncate(plainLabels, inner - CARD_LABEL_WIDTH))
     const updated = issue.updated_timestamp ?? issue.created_timestamp
 
     const lines = [top]
-    for (const line of wrap(sanitize(issue.title), inner)) lines.push(content(theme.bold(line)))
+    for (const line of wrap(strip_control(issue.title), inner)) lines.push(content(theme.bold(line)))
     lines.push(content(''))
-    for (const line of wrap(sanitize(issue.description || '—'), inner)) lines.push(content(line))
+    for (const line of wrap(strip_control(issue.description || '—'), inner)) lines.push(content(line))
     lines.push(content(''))
     lines.push(field('Status', theme.status(issue.status)))
     lines.push(field('Priority', theme.priority(issue.priority)))
