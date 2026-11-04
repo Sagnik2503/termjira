@@ -2,6 +2,7 @@ const { theme } = require('./theme')
 
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
 const ANSI_TOKEN = /(\x1b\[[0-9;?]*[ -/]*[@-~])/
+const ESCAPE_SEQUENCE = /\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[P^_X][\s\S]*?\x1b\\|[\x20-\x2f][\x30-\x7e]|[\x40-\x5f])/g
 const ZERO_WIDTH = /[\p{Mark}\p{Control}\p{Format}]/u
 const WIDE = /[\u1100-\u115f\u2329\u232a\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/u
 const EMOJI_PRESENTATION = /\p{Emoji_Presentation}/u
@@ -29,9 +30,11 @@ const visible_length = text => {
     return width
 }
 
-const sanitize = text => String(text ?? '')
-    .replace(ANSI, '')
+const strip_control = text => String(text ?? '')
+    .replace(ESCAPE_SEQUENCE, '')
     .replace(/[\x00-\x1f\x7f-\x9f]/g, char => (char === '\n' || char === '\t' ? ' ' : ''))
+
+const sanitize = strip_control
 
 const pad = (text, width) => text + ' '.repeat(Math.max(0, width - visible_length(text)))
 
@@ -254,4 +257,4 @@ function format_help(sections, { width } = {}) {
     return out.join('\n').trimEnd()
 }
 
-module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, format_row, format_list, format_issue, format_comments, format_help }
+module.exports = { visible_length, pad, truncate, resolve_width, format_relative_time, format_absolute_time, wrap, strip_control, format_row, format_list, format_issue, format_comments, format_help }

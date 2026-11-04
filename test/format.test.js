@@ -11,6 +11,7 @@ import {
     format_issue,
     format_comments,
     format_help,
+    strip_control,
 } from "../src/format.js";
 import { HELP_SECTIONS } from "../src/help.js";
 
@@ -426,9 +427,22 @@ describe("wide character rendering", () => {
     });
 });
 
+describe("strip_control", () => {
+    it("removes CSI, OSC and C0/C1 control sequences", () => {
+        expect(strip_control("safe\x1b[2Jtitle")).toBe("safetitle");
+        expect(strip_control("safe\x1b]0;pwned\x07title")).toBe("safetitle");
+        expect(strip_control("a\x00\x07\x9bb")).toBe("ab");
+        expect(strip_control("a\x1b(0b")).toBe("ab");
+    });
+
+    it("keeps ordinary text, emoji and CJK unchanged", () => {
+        expect(strip_control("Fix 日本語 😀 login")).toBe("Fix 日本語 😀 login");
+    });
+});
+
 describe("control-safe rendering", () => {
     const CONTROL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/;
-    const nasty = "safe\x1b[2Jtitle\x07\x00";
+    const nasty = "safe\x1b[2Jtitle\x1b]0;pwned\x07\x00\x9b";
 
     it("removes control characters and escape sequences from user text", () => {
         const row = stripAnsi(format_row({ ...issue, title: nasty }, { width: 60, now: 0 }));
@@ -453,5 +467,16 @@ describe("control-safe rendering", () => {
 
     it("does not count control characters as visible width", () => {
         expect(visible_length("a\x07b")).toBe(2);
+    });
+
+    it("removes escape codes from the filter context line", () => {
+        const out = format_list([issue], {
+            width: 100,
+            now: 0,
+            context: '1 match · title~"bad\x1b[2Jtitle"',
+        });
+
+        expect(out).not.toContain("\x1b[2J");
+        expect(stripAnsi(out)).toContain('title~"badtitle"');
     });
 });
